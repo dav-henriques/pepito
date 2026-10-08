@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 60">
+  <!-- lacinho (âncora: cabeça) -->
+  <path fill="#cf9a33" d="M50 30 12 8c-8-4-12 2-12 10v24c0 8 4 14 12 10Z"/>
+  <path fill="#e9b44c" d="M50 30 14 10c-6-3-10 1-10 8v22c0 7 4 11 10 8Z"/>
+  <path fill="#cf9a33" d="m50 30 38-22c8-4 12 2 12 10v24c0 8-4 14-12 10Z"/>
+  <path fill="#e9b44c" d="m50 30 36-20c6-3 10 1 10 8v22c0 7-4 11-10 8Z"/>
+  <rect x="40" y="18" width="20" height="24" rx="8" fill="#d8694a"/>
+  <path fill="#fff" opacity=".35" d="M14 16c8 2 16 6 24 12-10-2-18-4-24-6Z"/>
+</svg>

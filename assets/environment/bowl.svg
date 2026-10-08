@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 64">
+  <!-- pote de comida (a comida é sobreposta pelo jogo) -->
+  <path fill="#222d40" d="M6 22h108l-10 34a10 10 0 0 1-9.6 7H25.6A10 10 0 0 1 16 56Z"/>
+  <path fill="#2f3d55" d="M6 22h108l-9 30a10 10 0 0 1-9.6 7H24.6A10 10 0 0 1 15 52Z"/>
+  <ellipse cx="60" cy="22" rx="56" ry="13" fill="#3e4f6c"/>
+  <ellipse cx="60" cy="23" rx="47" ry="9" fill="#1b2433"/>
+  <path fill="none" stroke="#f6ecd9" stroke-width="3" d="M7 24c10 8 30 12 53 12s43-4 53-12"/>
+  <g fill="#f6ecd9" opacity=".9">
+    <ellipse cx="60" cy="47" rx="6" ry="5"/>
+    <circle cx="51" cy="40" r="2.6"/><circle cx="57" cy="37.5" r="2.6"/><circle cx="63" cy="37.5" r="2.6"/><circle cx="69" cy="40" r="2.6"/>
+  </g>
+</svg>

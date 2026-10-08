@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 90 56">
+  <!-- ratinho de corda (virado para a direita) -->
+  <path fill="none" stroke="#d8694a" stroke-width="4" stroke-linecap="round" d="M14 38C2 36 0 24 8 22"/>
+  <path fill="#9aa3ae" d="M14 40c0-18 16-30 36-30 14 0 26 8 32 20 2 6-2 12-10 14-8 2-50 6-58-4Z"/>
+  <path fill="#7c8592" d="M14 40c8 10 50 6 58 4 6-1 10-5 10-10-6 8-18 10-34 10-14 0-26-2-34-4Z"/>
+  <circle cx="54" cy="10" r="11" fill="#9aa3ae"/>
+  <circle cx="54" cy="10" r="6" fill="#e8a0a0"/>
+  <circle cx="72" cy="26" r="3" fill="#2b2a33"/>
+  <circle cx="84" cy="34" r="3.5" fill="#e07a6c"/>
+  <path stroke="#7c8592" stroke-width="1.6" stroke-linecap="round" d="M80 38l8 4M80 36l9 0"/>
+  <rect x="26" y="8" width="5" height="10" rx="2" fill="#e9b44c"/>
+  <rect x="22" y="2" width="13" height="7" rx="3" fill="#e9b44c"/>
+  <circle cx="30" cy="48" r="5" fill="#2f3d55"/><circle cx="60" cy="48" r="5" fill="#2f3d55"/>
+</svg>

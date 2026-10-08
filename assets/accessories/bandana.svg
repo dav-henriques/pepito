@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 70">
+  <!-- bandana (âncora: pescoço) -->
+  <path fill="#2f625e" d="M8 14c40 14 104 14 144 0l-4 12c-40 12-96 12-136 0Z"/>
+  <path fill="#3f7f7a" d="M10 12c40 12 100 12 140 0l-2 8C108 32 52 32 12 20Z"/>
+  <path fill="#3f7f7a" d="M40 24c26 6 54 6 80 0L84 66c-2 3-6 3-8 0Z"/>
+  <g fill="#f6ecd9"><circle cx="64" cy="34" r="3"/><circle cx="80" cy="44" r="3"/><circle cx="96" cy="34" r="3"/><circle cx="80" cy="30" r="2.5"/><circle cx="72" cy="50" r="2"/><circle cx="88" cy="50" r="2"/></g>
+</svg>

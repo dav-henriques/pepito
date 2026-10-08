@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- bolinha -->
+  <circle cx="32" cy="32" r="30" fill="#d8694a"/>
+  <path fill="#b8543a" d="M62 32a30 30 0 0 1-56 15c10 6 30 8 42-2s14-20 14-13Z"/>
+  <path fill="none" stroke="#f6ecd9" stroke-width="6" stroke-linecap="round" d="M8 20c14 8 34 8 48 0M6 40c16 10 36 10 52 0"/>
+  <ellipse cx="22" cy="14" rx="8" ry="4.5" fill="#fff" opacity=".45" transform="rotate(-25 22 14)"/>
+</svg>

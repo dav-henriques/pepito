@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 60">
+  <!-- petisco em formato de peixinho -->
+  <path fill="#cf9a33" d="M10 32c8-14 22-20 36-18 6 1 12 4 16 8l12-10c2-1 4 0 4 2l-4 18 4 18c0 2-2 3-4 2l-12-10c-4 4-10 7-16 8-14 2-28-4-36-18Z"/>
+  <path fill="#e9b44c" d="M10 30c8-14 22-20 36-18 6 1 12 4 16 8l12-10c2-1 4 0 4 2l-4 16 4 16c0 2-2 3-4 2L62 36c-4 4-10 7-16 8-14 2-28-4-36-14Z"/>
+  <circle cx="24" cy="26" r="3.5" fill="#2f3d55"/>
+  <path fill="none" stroke="#cf9a33" stroke-width="3" stroke-linecap="round" d="M38 20c4 6 4 14 0 20M48 20c3 6 3 14 0 20"/>
+</svg>

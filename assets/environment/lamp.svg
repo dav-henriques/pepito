@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 120">
+  <!-- luminária pendente -->
+  <rect x="38.5" y="0" width="3" height="62" fill="#2f3d55"/>
+  <rect x="33" y="56" width="14" height="10" rx="3" fill="#2f3d55"/>
+  <path fill="#3f7f7a" d="M40 62c-20 0-34 18-38 44h76C74 80 60 62 40 62Z"/>
+  <path fill="#2f625e" d="M2 106h76c0 4-2 6-6 6H8c-4 0-6-2-6-6Z"/>
+  <path fill="#6fa8a0" opacity=".6" d="M24 72c-8 8-12 18-14 30h6c2-12 4-20 8-30Z"/>
+  <ellipse class="bulb" cx="40" cy="112" rx="12" ry="6" fill="#fff4c2"/>
+</svg>

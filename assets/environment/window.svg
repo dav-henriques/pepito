@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 170">
+  <!-- moldura da janela: o "vidro" é transparente; o céu é desenhado por trás em CSS -->
+  <path fill="#f6ecd9" fill-rule="evenodd" d="M14 6h192a10 10 0 0 1 10 10v128H4V16A10 10 0 0 1 14 6Zm8 8v126h176V14Z"/>
+  <path fill="#e3d2b4" d="M22 14h176v5H22z" opacity=".7"/>
+  <rect x="106" y="14" width="8" height="126" fill="#f6ecd9"/>
+  <rect x="22" y="73" width="176" height="7" fill="#f6ecd9"/>
+  <rect x="22" y="80" width="176" height="2.5" fill="#e3d2b4"/>
+  <path fill="#fff" opacity=".22" d="M30 22h22L34 66h-4zM122 22h12l-12 30z"/>
+  <!-- parapeito -->
+  <rect x="0" y="140" width="220" height="14" rx="5" fill="#b9794a"/>
+  <rect x="0" y="150" width="220" height="5" rx="2.5" fill="#96603a"/>
+  <rect x="6" y="140" width="208" height="3" rx="1.5" fill="#cf9461"/>
+  <!-- cortinas -->
+  <path fill="#e9b44c" d="M0 0h40c-4 30-2 56 10 80-18 30-22 56-24 74H0Z"/>
+  <path fill="#cf9a33" d="M12 0h8c-2 34 2 60 14 82-12 26-16 50-16 72h-8c0-24 4-46 14-70C14 62 10 34 12 0Z" opacity=".55"/>
+  <path fill="#e9b44c" d="M220 0h-40c4 30 2 56-10 80 18 30 22 56 24 74h26Z"/>
+  <path fill="#cf9a33" d="M208 0h-8c2 34-2 60-14 82 12 26 16 50 16 72h8c0-24-4-46-14-70C206 62 210 34 208 0Z" opacity=".55"/>
+  <rect x="34" y="74" width="20" height="9" rx="4.5" fill="#d8694a"/>
+  <rect x="166" y="74" width="20" height="9" rx="4.5" fill="#d8694a"/>
+  <rect x="0" y="0" width="220" height="7" rx="3.5" fill="#96603a"/>
+</svg>

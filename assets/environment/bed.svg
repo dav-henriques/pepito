@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 110">
+  <!-- caminha redonda (vista levemente de cima) -->
+  <ellipse cx="120" cy="66" rx="118" ry="42" fill="#b8543a"/>
+  <ellipse cx="120" cy="58" rx="116" ry="40" fill="#d8694a"/>
+  <path fill="#e47e5f" d="M18 50c20-26 64-38 102-38s82 12 102 38c-26-16-62-24-102-24S44 34 18 50Z"/>
+  <ellipse cx="120" cy="62" rx="88" ry="26" fill="#a9462f"/>
+  <ellipse cx="120" cy="66" rx="84" ry="23" fill="#f6ecd9"/>
+  <path fill="#efe0c4" d="M40 70c22 12 58 18 80 18s58-6 80-18c-6 14-42 26-80 26S46 84 40 70Z"/>
+  <path fill="none" stroke="#efe0c4" stroke-width="3" stroke-linecap="round" d="M70 62c10-4 20-4 30 0M128 58c10-4 22-4 32 0M96 74c8-3 16-3 24 0"/>
+  <path fill="none" stroke="#b8543a" stroke-width="3" stroke-dasharray="1 9" stroke-linecap="round" d="M12 66c18 26 64 38 108 38s90-12 108-38"/>
+</svg>

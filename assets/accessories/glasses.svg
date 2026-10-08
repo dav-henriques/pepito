@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 60">
+  <!-- óculos redondos (âncora: olhos) -->
+  <g fill="#9fd3e8" opacity=".35"><circle cx="38" cy="30" r="24"/><circle cx="122" cy="30" r="24"/></g>
+  <g fill="none" stroke="#2b2a33" stroke-width="6"><circle cx="38" cy="30" r="24"/><circle cx="122" cy="30" r="24"/><path d="M62 28c10-8 26-8 36 0"/><path d="M14 26 2 22M146 26l12-4" stroke-linecap="round"/></g>
+  <path fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" opacity=".7" d="M24 20c4-4 8-6 12-6M108 20c4-4 8-6 12-6"/>
+</svg>

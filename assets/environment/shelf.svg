@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 40">
+  <!-- prateleira -->
+  <path fill="#96603a" d="M30 12h10l-4 26h-4Zm130 0h10l-2 26h-4Z"/>
+  <rect x="0" y="0" width="200" height="14" rx="4" fill="#b9794a"/>
+  <rect x="0" y="10" width="200" height="5" rx="2.5" fill="#96603a"/>
+  <rect x="4" y="1" width="192" height="3" rx="1.5" fill="#cf9461"/>
+</svg>

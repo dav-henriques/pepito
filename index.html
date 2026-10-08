@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#2f3d55">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="description" content="Um bichinho virtual que vive no seu celular.">
+  <title>Pepito</title>
+  <link rel="icon" href="assets/pet/happy.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles/main.css">
+</head>
+<body>
+  <div id="app">
+    <main id="room" class="room" aria-label="Quarto do pet">
+
+      <!-- ============ PAREDE (objetos fixos) ============ -->
+      <div class="wall" aria-hidden="false">
+        <div class="wall-pattern"></div>
+
+        <button class="window obj-wall" data-hit="window" aria-label="Janela">
+          <span class="sky">
+            <span class="sun"></span>
+            <span class="moon"></span>
+            <span class="stars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="cloud c1"></span>
+            <span class="cloud c2"></span>
+            <span class="shooting-star"></span>
+          </span>
+          <img data-asset="environment.window" alt="" draggable="false">
+        </button>
+
+        <button class="lamp obj-wall" data-hit="lamp" aria-label="Luminária">
+          <img data-asset="environment.lamp" alt="" draggable="false">
+        </button>
+
+        <button class="clock obj-wall" data-hit="clock" aria-label="Relógio">
+          <img data-asset="environment.clock" alt="" draggable="false">
+          <i class="hand hour"></i><i class="hand min"></i><i class="pin"></i>
+        </button>
+
+        <button class="picture obj-wall" data-hit="picture" aria-label="Quadro">
+          <img data-asset="environment.picture" alt="" draggable="false">
+        </button>
+
+        <div class="shelf">
+          <button class="radio" data-hit="radio" aria-label="Rádio">
+            <img data-asset="environment.radio" alt="" draggable="false">
+          </button>
+          <button class="laser-pointer" data-hit="laser" aria-label="Caneta laser">
+            <img data-asset="toys.laser" alt="" draggable="false">
+          </button>
+          <img class="shelf-img" data-asset="environment.shelf" alt="" draggable="false">
+        </div>
+
+        <div class="baseboard"></div>
+      </div>
+
+      <!-- ============ CHÃO ============ -->
+      <div class="floor"><div class="floor-shade"></div></div>
+
+      <!-- ============ MUNDO (ordenado por profundidade) ============ -->
+      <div class="world" id="world">
+        <div class="rug" data-zone="rug"><img id="rug-img" data-asset="environment.rugSun" alt="" draggable="false"></div>
+
+        <button class="obj plant" data-hit="plant" data-zone="plant" aria-label="Planta">
+          <img data-asset="environment.plant" alt="" draggable="false">
+          <span class="plant-flower"></span>
+        </button>
+
+        <button class="obj bed" data-hit="bed" data-zone="bed" aria-label="Caminha">
+          <img data-asset="environment.bed" alt="" draggable="false">
+        </button>
+        <div class="obj bed bed-front" aria-hidden="true"><img data-asset="environment.bed" alt="" draggable="false"></div>
+
+        <button class="obj bowl" data-hit="bowl" data-zone="bowl" aria-label="Pote de comida">
+          <img data-asset="environment.bowl" alt="" draggable="false">
+          <span class="bowl-food"></span>
+        </button>
+
+        <div class="obj tub-back" data-zone="tub"><img data-asset="environment.tubBack" alt="" draggable="false"></div>
+        <button class="obj tub-front" data-hit="tub" aria-label="Banheira">
+          <span class="tub-water"><span class="tub-foam"></span></span>
+          <img data-asset="environment.tubFront" alt="" draggable="false">
+        </button>
+
+        <!-- Sombra do pet (no chão) -->
+        <div class="pet-shadow" id="pet-shadow"></div>
+
+        <!-- ===== PET =====
+             camadas (de fora pra dentro):
+             .pet        → posição x/y + escala de profundidade  (Anime.js / physics.js)
+             .pet-rot    → rotação física                        (Anime.js / physics.js)
+             .pet-squash → squash & stretch                      (Anime.js / physics.js)
+             .pet-face   → espelhar ao virar                     (Anime.js / physics.js)
+             .pet-mood   → respiração/idle por estado            (GSAP / animation.js)
+             imagens     → trocadas pelo sistema de estados      (petState.js)        -->
+        <div class="pet" id="pet" data-hit="pet" role="img" aria-label="Pet">
+          <div class="pet-rot">
+            <div class="pet-squash">
+              <div class="pet-face">
+                <div class="pet-mood">
+                  <img class="pet-img a" alt="" draggable="false">
+                  <img class="pet-img b" alt="" draggable="false">
+                  <div class="pet-accessory"></div>
+                  <div class="pet-foam"></div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="pet-bubble" aria-live="polite"></div>
+        </div>
+      </div>
+
+      <!-- Luz do dia/noite + luminária -->
+      <div class="light-tint"></div>
+      <div class="lamp-light"></div>
+
+      <!-- Partículas -->
+      <div class="fx" id="fx"></div>
+
+      <!-- ============ UI MÍNIMA ============ -->
+      <div class="ui" id="ui">
+        <header class="hud">
+          <button class="chip name-chip" id="name-chip" aria-label="Personalizar">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><use href="#i-paw"/></svg>
+            <span class="pet-name">Pepito</span>
+            <span class="level" id="level-dots"></span>
+          </button>
+          <div class="hud-right">
+            <button class="chip needs" id="needs" aria-label="Necessidades">
+              <span class="ring" data-need="hunger"><svg viewBox="0 0 36 36"><circle class="track" cx="18" cy="18" r="15"/><circle class="bar" cx="18" cy="18" r="15"/></svg><svg class="ico" viewBox="0 0 24 24"><use href="#i-food"/></svg><em class="lbl">fome</em></span>
+              <span class="ring" data-need="happiness"><svg viewBox="0 0 36 36"><circle class="track" cx="18" cy="18" r="15"/><circle class="bar" cx="18" cy="18" r="15"/></svg><svg class="ico" viewBox="0 0 24 24"><use href="#i-smile"/></svg><em class="lbl">humor</em></span>
+              <span class="ring" data-need="energy"><svg viewBox="0 0 36 36"><circle class="track" cx="18" cy="18" r="15"/><circle class="bar" cx="18" cy="18" r="15"/></svg><svg class="ico" viewBox="0 0 24 24"><use href="#i-bolt"/></svg><em class="lbl">energia</em></span>
+              <span class="ring" data-need="cleanliness"><svg viewBox="0 0 36 36"><circle class="track" cx="18" cy="18" r="15"/><circle class="bar" cx="18" cy="18" r="15"/></svg><svg class="ico" viewBox="0 0 24 24"><use href="#i-drop"/></svg><em class="lbl">limpeza</em></span>
+            </button>
+            <button class="chip icon-btn" id="sound-btn" aria-label="Som">
+              <svg class="ico" viewBox="0 0 24 24"><use href="#i-sound"/></svg>
+            </button>
+          </div>
+        </header>
+
+        <div class="hint" id="hint" role="status"></div>
+        <div class="toast" id="toast" role="status"></div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Tela de carregamento -->
+  <div id="loader" aria-hidden="true">
+    <div class="loader-paw">
+      <svg viewBox="0 0 24 24"><use href="#i-paw"/></svg>
+    </div>
+  </div>
+
+  <!-- Aviso caso as bibliotecas não carreguem (sem internet) -->
+  <noscript><p class="nojs">Este joguinho precisa de JavaScript ativado.</p></noscript>
+
+  <!-- ============ ÍCONES ============ -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="i-paw" viewBox="0 0 24 24"><ellipse cx="12" cy="16" rx="5.2" ry="4.4" fill="currentColor"/><ellipse cx="5.2" cy="10.4" rx="2.2" ry="2.8" fill="currentColor"/><ellipse cx="9.4" cy="6.6" rx="2.2" ry="2.9" fill="currentColor"/><ellipse cx="14.6" cy="6.6" rx="2.2" ry="2.9" fill="currentColor"/><ellipse cx="18.8" cy="10.4" rx="2.2" ry="2.8" fill="currentColor"/></symbol>
+      <symbol id="i-food" viewBox="0 0 24 24"><path fill="currentColor" d="M3 11h18l-1.6 6.4A3 3 0 0 1 16.5 20h-9a3 3 0 0 1-2.9-2.6Z"/><path fill="currentColor" d="M7 10c0-2.5 2.2-4 5-4s5 1.5 5 4Z" opacity=".55"/></symbol>
+      <symbol id="i-smile" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="2.4"/><circle cx="9" cy="10" r="1.4" fill="currentColor"/><circle cx="15" cy="10" r="1.4" fill="currentColor"/><path d="M8.2 14c1 1.6 2.3 2.4 3.8 2.4s2.8-.8 3.8-2.4" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-bolt" viewBox="0 0 24 24"><path fill="currentColor" d="M13.5 2 5 13.5h6L10 22l9-12h-6.2Z"/></symbol>
+      <symbol id="i-drop" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2.5c3.6 4.4 6.5 8.2 6.5 11.7a6.5 6.5 0 0 1-13 0c0-3.5 2.9-7.3 6.5-11.7Z"/></symbol>
+      <symbol id="i-sound" viewBox="0 0 24 24"><path fill="currentColor" d="M4 9h4l5-4v14l-5-4H4Z"/><path d="M16 8.5a5 5 0 0 1 0 7M18.5 6a8.5 8.5 0 0 1 0 12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></symbol>
+      <symbol id="i-mute" viewBox="0 0 24 24"><path fill="currentColor" d="M4 9h4l5-4v14l-5-4H4Z"/><path d="m16 9 6 6m0-6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"/></symbol>
+      <symbol id="i-moon" viewBox="0 0 24 24"><path fill="currentColor" d="M15.5 3.2A9 9 0 1 0 20.8 15 7.4 7.4 0 0 1 15.5 3.2Z"/></symbol>
+      <symbol id="i-z" viewBox="0 0 24 24"><path fill="currentColor" d="M6 5h12v2.6L9.8 17H18v2.5H6v-2.6L14.2 7.5H6Z"/></symbol>
+      <symbol id="i-heart" viewBox="0 0 24 24"><path fill="currentColor" d="M12 20.5S3 15 3 9a4.8 4.8 0 0 1 9-2.4A4.8 4.8 0 0 1 21 9c0 6-9 11.5-9 11.5Z"/></symbol>
+      <symbol id="i-note" viewBox="0 0 24 24"><path fill="currentColor" d="M9 4.5 19 2.5v12.2a3 3 0 1 1-2-2.8V6.4l-6 1.2v9.1a3 3 0 1 1-2-2.8Z"/></symbol>
+      <symbol id="i-excl" viewBox="0 0 24 24"><rect x="9.6" y="3" width="4.8" height="12" rx="2.4" fill="currentColor"/><circle cx="12" cy="19.4" r="2.6" fill="currentColor"/></symbol>
+      <symbol id="i-quest" viewBox="0 0 24 24"><path d="M8 8.6a4 4 0 1 1 6.2 3.3c-1.4.9-2.2 1.7-2.2 3.4" fill="none" stroke="currentColor" stroke-width="3.2" stroke-linecap="round"/><circle cx="12" cy="20" r="2.2" fill="currentColor"/></symbol>
+      <symbol id="i-anger" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round"><path d="M9.5 3.5c0 3 1.5 5 4.5 5.2M3.5 9.5c3 0 5 1.5 5.2 4.5M14.5 20.5c0-3-1.5-5-4.5-5.2M20.5 14.5c-3 0-5-1.5-5.2-4.5"/></g></symbol>
+      <symbol id="i-sparkle" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2c.8 5 2.9 7.3 8 8-5.1.8-7.2 3-8 8-.8-5-2.9-7.2-8-8 5.1-.7 7.2-3 8-8Z"/><path fill="currentColor" d="M19 15.5c.3 2 1.1 2.8 3 3.1-1.9.3-2.7 1.1-3 3-.3-1.9-1.1-2.7-3-3 1.9-.3 2.7-1.1 3-3.1Z"/></symbol>
+      <symbol id="i-dots" viewBox="0 0 24 24"><circle cx="5.5" cy="13" r="2.4" fill="currentColor"/><circle cx="12" cy="13" r="2.4" fill="currentColor"/><circle cx="18.5" cy="13" r="2.4" fill="currentColor"/></symbol>
+      <symbol id="i-star" viewBox="0 0 24 24"><path fill="currentColor" d="m12 2.5 2.9 6 6.6.8-4.9 4.5 1.3 6.5L12 17l-5.9 3.3 1.3-6.5-4.9-4.5 6.6-.8Z"/></symbol>
+      <symbol id="i-soap" viewBox="0 0 24 24"><rect x="3" y="9" width="18" height="11" rx="4" fill="currentColor"/><circle cx="8" cy="5.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="4.5" r="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
+      <symbol id="i-shower" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h7a5 5 0 0 1 5 5v1h3v3H8v-3h5V9a2 2 0 0 0-2-2H4Z"/><g fill="currentColor"><circle cx="9.5" cy="16" r="1.2"/><circle cx="13.5" cy="16" r="1.2"/><circle cx="17.5" cy="16" r="1.2"/><circle cx="11" cy="20" r="1.2"/><circle cx="15.5" cy="20" r="1.2"/></g></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="3" fill="currentColor"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
+      <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor"/><path d="M4 9c5 3 11 3 16 0M3.6 14.5c5 3.2 11.8 3.2 16.8 0" fill="none" stroke="#fff" stroke-width="2" opacity=".7"/></symbol>
+    </defs>
+  </svg>
+
+  <!-- ============ BIBLIOTECAS (versões fixas) ============ -->
+  <!-- GSAP: interface, transições, timelines, objetos, efeitos -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+  <!-- Anime.js: física percebida do pet (drag, inércia, mola, squash/stretch) -->
+  <script src="https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/bundles/anime.umd.min.js"></script>
+
+  <!-- ============ JOGO (ordem importa) ============ -->
+  <script src="src/config/petConfig.js"></script>
+  <script src="src/config/assets.js"></script>
+  <script src="src/core/core.js"></script>
+
+  <script src="src/components/icons.js"></script>
+  <script src="src/components/particles.js"></script>
+  <script src="src/components/bubble.js"></script>
+  <script src="src/components/room.js"></script>
+
+  <script src="src/systems/save.js"></script>
+  <script src="src/systems/audio.js"></script>
+  <script src="src/systems/time.js"></script>
+  <script src="src/systems/needs.js"></script>
+  <script src="src/systems/progress.js"></script>
+  <script src="src/systems/petState.js"></script>
+  <script src="src/systems/physics.js"></script>
+  <script src="src/systems/animation.js"></script>
+  <script src="src/systems/interaction.js"></script>
+  <script src="src/systems/food.js"></script>
+  <script src="src/systems/bath.js"></script>
+  <script src="src/systems/play.js"></script>
+  <script src="src/systems/reactions.js"></script>
+  <script src="src/systems/behavior.js"></script>
+  <script src="src/systems/objects.js"></script>
+  <script src="src/systems/easterEggs.js"></script>
+
+  <script src="src/components/hud.js"></script>
+  <script src="src/components/customize.js"></script>
+
+  <script src="src/main.js"></script>
+</body>
+</html>

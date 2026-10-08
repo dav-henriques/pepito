@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 110 80">
+  <!-- rádio retrô -->
+  <path stroke="#2f3d55" stroke-width="3" stroke-linecap="round" d="M78 16 96 2"/>
+  <circle cx="96" cy="2.5" r="2.5" fill="#2f3d55"/>
+  <rect x="4" y="16" width="102" height="60" rx="14" fill="#b8543a"/>
+  <rect x="4" y="14" width="102" height="58" rx="14" fill="#d8694a"/>
+  <rect x="12" y="22" width="50" height="42" rx="10" fill="#f6ecd9"/>
+  <g fill="#d6c5a6">
+    <circle cx="24" cy="33" r="3"/><circle cx="37" cy="33" r="3"/><circle cx="50" cy="33" r="3"/>
+    <circle cx="24" cy="43" r="3"/><circle cx="37" cy="43" r="3"/><circle cx="50" cy="43" r="3"/>
+    <circle cx="24" cy="53" r="3"/><circle cx="37" cy="53" r="3"/><circle cx="50" cy="53" r="3"/>
+  </g>
+  <rect x="70" y="24" width="28" height="12" rx="4" fill="#2f3d55"/>
+  <rect x="80" y="26" width="3" height="8" rx="1.5" fill="#e9b44c"/>
+  <circle cx="77" cy="52" r="7" fill="#f6ecd9"/><circle cx="77" cy="52" r="2.5" fill="#b8543a"/>
+  <circle cx="94" cy="52" r="5" fill="#f6ecd9"/>
+  <path fill="#fff" opacity=".25" d="M14 20h36c-12 2-26 6-34 12Z"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <!-- relógio de parede (os ponteiros são elementos do jogo) -->
+  <circle cx="50" cy="52" r="47" fill="#222d40"/>
+  <circle cx="50" cy="50" r="47" fill="#2f3d55"/>
+  <circle cx="50" cy="50" r="39" fill="#f6ecd9"/>
+  <g stroke="#2f3d55" stroke-linecap="round">
+    <path stroke-width="4" d="M50 16v7M50 77v7M16 50h7M77 50h7"/>
+    <path stroke-width="2.5" d="m67 20.6-2 3.4M79.4 33l-3.4 2M79.4 67l-3.4-2M67 79.4l-2-3.4M33 79.4l2-3.4M20.6 67l3.4-2M20.6 33l3.4 2M33 20.6l2 3.4"/>
+  </g>
+  <path fill="#fff" opacity=".35" d="M22 36c6-12 16-20 30-22-10 4-20 12-26 24Z"/>
+</svg>
