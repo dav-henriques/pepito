@@ -102,6 +102,8 @@
     snore: () => noise(0.9, 'lowpass', 260, 420, 0.07, { attack: 0.35 }),
     squish: (o) => { tone(260 * (o.pitch || 1), 140, 0.16, 'sine', 0.22, { mid: 420, midAt: 0.25 }); noise(0.1, 'lowpass', 900, 300, 0.06); },
     shutter: () => { noise(0.03, 'highpass', 3000, 5000, 0.18); noise(0.05, 'bandpass', 1800, 1200, 0.14, { delay: 0.07, Q: 2 }); tone(5200, 4800, 0.04, 'square', 0.02, { delay: 0.02 }); },
+    // adesivo descolando do papel (pegar o gato / um brinquedo)
+    peel: (o) => { noise(0.11, 'bandpass', 2400, 6200, 0.11 * (o.v ?? 1), { Q: 0.9, attack: 0.012 }); noise(0.05, 'highpass', 5000, 7000, 0.05 * (o.v ?? 1), { delay: 0.05 }); },
     tada: () => { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, f, 0.32 + i * 0.05, 'triangle', 0.1, { delay: i * 0.07 })); },
     meow(o) {
       const c = ensure(); if (!c) return;

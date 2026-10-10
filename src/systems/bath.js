@@ -169,6 +169,17 @@
     if (!ps.can('bathe')) return;
     const z = G.room.zones.tub;
     st = { phase: 'enter', soap: 0, rinse: 0, foam: [], startedDirty: G.needs.get('cleanliness') < G.config.needs.thresholds.dirty };
+    if (opts.walk) {
+      // chamado pela banheira: vai andando até a beirada antes de pular
+      const P = G.physics.P;
+      const side = z.cx > G.room.W / 2 ? -1 : 1;
+      const near = G.room.clampFloor(z.cx + side * (z.w * 0.5 + G.room.petW * 0.15), Math.min(z.seatZ + 8, G.room.geo.zMax));
+      if (Math.hypot(P.x - near.x, P.z - near.z) > G.room.petW * 0.5) {
+        const ok = await G.physics.walkTo(near.x, near.z, { run: true });
+        if (!st) return;
+        if (!ok || G.petState.physical) { st = null; return; }
+      }
+    }
     if (ps.activity === 'sleeping') ps.setActivity(null);
     ps.setActivity('bathing');
     G.food.closeMenu?.();
@@ -223,8 +234,9 @@
     st = null;
 
     if (progress > 0.5) {
-      // sacode a água
+      // sacode a água (já com a cara de limpinho)
       const P = G.physics.P;
+      G.petState.emote('clean', 5400);
       G.audio.play('splash', { intensity: 0.5 });
       await G.physics.shakeOff(() => {
         if (Math.random() < 0.35) {
@@ -232,7 +244,6 @@
           G.fx.spawn('drop', p.x + U.rand(-30, 30), p.y + U.rand(0, 40), { vx: U.rand(-260, 260), vy: U.rand(-260, -60) });
         }
       });
-      G.petState.emote('clean', 4800);
       const p = G.physics.anchorPoint('top');
       G.fx.burst('sparkle', p.x, p.y + 30, 9, { spread: 1.3 });
       G.audio.play('sparkle');
@@ -262,8 +273,8 @@
     const over = G.room.inFootprint('tub', P.x, P.z, 10);
     if (over !== tubHover) {
       tubHover = over;
-      gsap.to(tubEl, { scaleY: over ? 1.04 : 1, scaleX: over ? 1.03 : 1, duration: 0.3, ease: over ? 'back.out(3)' : 'power2.out' });
-      if (over) G.audio.play('water');
+      gsap.to(tubEl, { scaleY: over ? 1.04 : 1, scaleX: over ? 1.03 : 1, duration: 0.3, ease: over ? 'back.out(3)' : 'power2.out', overwrite: 'auto' });
+      if (over) { G.audio.play('water'); G.haptic(5); }
     }
   }
 
@@ -276,11 +287,24 @@
       gsap.set(waterEl, { scaleY: 0, opacity: 0 });
 
       G.interaction.register('tub', G.interaction.tap(() => {
-        // dica sutil: ondinha na água
+        // ondinha na água
         gsap.fromTo(tubEl, { scaleX: 1.04, scaleY: 0.97 }, { scaleX: 1, scaleY: 1, duration: 0.6, ease: 'elastic.out(1, .4)' });
         G.audio.play('water');
         const z = G.room.zones.tub;
         G.fx.burst('bubble', z.cx, z.rimY, 3, { jitter: 40, rise: 80 });
+        // tocar na banheira chama o gato pro banho… se ele estiver precisando
+        const ps = G.petState;
+        if (st || !ps.can('autonomous') || !ps.can('bathe')) return;
+        G.physics.faceTo(z.cx);
+        if (G.needs.get('cleanliness') < 75) {
+          G.bubble.show('drop', { duration: 900 });
+          start({ walk: true });
+        } else {
+          // limpinho: nem pensar
+          G.physics.wobble(U.pick([-9, 9]));
+          G.bubble.show(U.pick(['?!', 'dots']), { duration: 1000 });
+          G.audio.play('meow', { short: true, pitch: 0.9 });
+        }
       }));
 
       G.bus.on('pet:lift', () => {

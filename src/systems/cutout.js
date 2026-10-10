@@ -162,11 +162,11 @@
     const w = iw * k, h = ih * k;
     const bottom = SIZE * (1 - footOffset);
     if (L.cardBorder === false) {
-      // só a foto (cantos levemente arredondados) com a sombra seguindo a própria foto
+      // só a foto (cantos arredondados de figurinha) com a sombra seguindo a própria foto
       const x = (SIZE - w) / 2, y = bottom - h;
       const ph = mk();
       const pc = ph.getContext('2d');
-      roundRect(pc, x, y, w, h, SIZE * 0.012);
+      roundRect(pc, x, y, w, h, SIZE * 0.03);
       pc.clip();
       pc.drawImage(img, x, y, w, h);
       c.shadowColor = 'rgba(40, 24, 12, 0.32)';
@@ -203,8 +203,12 @@
 
   // toDataURL é síncrono e rápido (~3 ms em 512px); o toBlob do Chrome espera um
   // "momento ocioso" e pode levar até 1 s por imagem com animações rodando.
+  // WebP (com transparência) ocupa ~5× menos memória que PNG para fotos; onde o
+  // navegador não sabe gerar WebP, ele devolve PNG sozinho.
+  let webp = null;
   function toURL(cv) {
-    return Promise.resolve(cv.toDataURL('image/png'));
+    if (webp === null) webp = mk(2, 2).toDataURL('image/webp').startsWith('data:image/webp');
+    return Promise.resolve(webp ? cv.toDataURL('image/webp', 0.92) : cv.toDataURL('image/png'));
   }
 
   /* ======================================================================
@@ -296,6 +300,12 @@
     /** Coloca uma imagem (já carregada) na fila. priority → vai para a frente */
     enqueue(key, img, priority) {
       if (mode === 'css') { settle(key, null); return; }
+      // Foto JPG não tem transparência: o "cartão" (cantos arredondados + sombra)
+      // sai igualzinho no CSS, de graça. Pular o canvas aqui evita desenhar, ler
+      // os pixels e codificar 20 fotos ao abrir o jogo — era o que travava o
+      // começo no celular. (Para processar mesmo assim: look.processPhotos: true)
+      const path = (G.config.pet.images || {})[key] || img.src || '';
+      if (/\.jpe?g($|\?)/i.test(path) && look().processPhotos !== true) { settle(key, null); return; }
       if (key in out || queue.some((q) => q.key === key) || working === key) return;
       queue[priority ? 'unshift' : 'push']({ key, img });
       pump();

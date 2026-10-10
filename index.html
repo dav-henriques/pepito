@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#ffffff">
+  <meta name="theme-color" content="#fbf8f1">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="description" content="Um gato muito estranho que mora num quartinho dentro do seu celular.">
@@ -16,11 +16,23 @@
 </head>
 <body>
   <div id="app">
+   <div class="page-frame">
     <main id="room" class="room" aria-label="Quarto do pet">
-      <!-- Fundo branco. Só o chão (invisível) onde o pet anda, com os móveis.
+      <!-- Colagem: parede de papel + chão de papel kraft recortado à mão
+           (ou uma foto de verdade: assets.js → room.background).
            Cada móvel é uma imagem (assets/room/…), como o gato.
            Cama e banheira usam a mesma imagem duas vezes: atrás do pet e,
            recortada, na frente dele (petConfig → furniture.frontClip). -->
+      <div class="backdrop" aria-hidden="true">
+        <img class="backdrop-photo" alt="" draggable="false" hidden>
+        <!-- rabiscos de lápis na parede (só decoração) -->
+        <svg class="doodle d1" viewBox="0 0 24 24"><path d="M12 2.6 14.3 9l6.9.4-5.4 4.3 1.9 6.8L12 16.7l-5.8 3.9 2-6.8-5.4-4.4L9.6 9Z"/></svg>
+        <svg class="doodle d2" viewBox="0 0 24 24"><path d="M12 19.6C4.6 14.3 2.5 9.6 5.7 6.4c2.4-2.3 5-1.1 6.2 1.6 1.4-2.8 4.1-3.9 6.4-1.5 3 3.3.6 8-6.3 13.1Z"/></svg>
+        <svg class="doodle d3" viewBox="0 0 24 24"><path d="M12.4 12.3c-.9-.5-.2-1.9.8-1.5 1.6.7.8 3.2-1 3.1-2.6-.1-3.1-3.8-.9-5 3-1.6 6.4 1.2 5.6 4.4-1 4-6.4 4.8-8.8 1.8"/></svg>
+        <svg class="doodle d4" viewBox="0 0 24 24"><path d="M12 3c.5 5.6 2.9 8.3 8.6 9-5.7.6-8.1 3.3-8.6 9-.6-5.7-3-8.4-8.6-9 5.6-.7 8-3.4 8.6-9Z"/></svg>
+        <svg class="doodle d5" viewBox="0 0 48 16"><path d="M2 10c4-7 7-7 10 0s7 7 11 0 7-7 11 0 7 6 12-1"/></svg>
+        <div class="floor-edge"><div class="floor"></div></div>
+      </div>
 
       <!-- ============ MUNDO (ordenado por profundidade) ============ -->
       <div class="world" id="world">
@@ -32,6 +44,8 @@
         <button class="obj bowl" data-hit="bowl" data-zone="bowl" aria-label="Pote de comida">
           <img data-asset="room.bowl" alt="" draggable="false">
           <span class="bowl-food"></span>
+          <!-- a borda da frente do pote, por cima da comida (petConfig → furniture.bowl.frontClip) -->
+          <img class="bowl-front" data-asset="room.bowl" alt="" draggable="false">
         </button>
 
         <div class="obj tub-back" data-zone="tub">
@@ -60,7 +74,6 @@
                 <div class="pet-mood">
                   <img class="pet-img a" alt="" draggable="false">
                   <img class="pet-img b" alt="" draggable="false">
-                  <div class="pet-accessory"></div>
                   <div class="pet-foam"></div>
                 </div>
               </div>
@@ -103,6 +116,10 @@
         <div class="toast" id="toast" role="status"></div>
       </div>
     </main>
+    <!-- fitas segurando a folha do quarto (só aparecem no computador) -->
+    <span class="frame-tape l" aria-hidden="true"></span>
+    <span class="frame-tape r" aria-hidden="true"></span>
+   </div>
   </div>
 
   <!-- Tela de carregamento -->
@@ -139,7 +156,6 @@
       <symbol id="i-soap" viewBox="0 0 24 24"><rect x="3" y="9" width="18" height="11" rx="4" fill="currentColor"/><circle cx="8" cy="5.5" r="2.3" fill="none" stroke="currentColor" stroke-width="1.6"/><circle cx="14" cy="4.5" r="1.6" fill="none" stroke="currentColor" stroke-width="1.6"/></symbol>
       <symbol id="i-shower" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h7a5 5 0 0 1 5 5v1h3v3H8v-3h5V9a2 2 0 0 0-2-2H4Z"/><g fill="currentColor"><circle cx="9.5" cy="16" r="1.2"/><circle cx="13.5" cy="16" r="1.2"/><circle cx="17.5" cy="16" r="1.2"/><circle cx="11" cy="20" r="1.2"/><circle cx="15.5" cy="20" r="1.2"/></g></symbol>
       <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></symbol>
-      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10.5" width="14" height="10" rx="3" fill="currentColor"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5" fill="none" stroke="currentColor" stroke-width="2.4"/></symbol>
       <symbol id="i-ball" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="currentColor"/><path d="M4 9c5 3 11 3 16 0M3.6 14.5c5 3.2 11.8 3.2 16.8 0" fill="none" stroke="#fff" stroke-width="2" opacity=".7"/></symbol>
     </defs>
   </svg>
@@ -177,7 +193,7 @@
   <script src="src/systems/bath.js"></script>
   <script src="src/systems/play.js"></script>
   <script src="src/systems/reactions.js"></script>
-  <script src="src/systems/speech.js"></script>
+  <script src="src/systems/expressions.js"></script>
   <script src="src/systems/behavior.js"></script>
   <script src="src/systems/objects.js"></script>
 

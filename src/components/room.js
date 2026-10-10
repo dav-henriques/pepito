@@ -8,8 +8,8 @@
   'use strict';
   const U = G.util;
 
-  // Faixa "andável" do chão, em fração da altura do quarto
-  const GEO = { zMin: 0.612, zMax: 0.945, topMargin: 0.015 };
+  // Faixa "andável" do chão, em fração da altura do quarto (petConfig → room)
+  const GEO = () => ({ floorTop: 0.45, zMin: 0.52, zMax: 0.952, topMargin: 0.015, ...(G.config.room || {}) });
 
   const room = {
     el: null,
@@ -17,6 +17,7 @@
     W: 375,
     H: 740,
     u: 3.75,
+    ou: 3.75,
     petW: 128,
     petH: 128,
     left: 0,
@@ -32,8 +33,8 @@
       this.el.classList.toggle('no-outline', L.outline === false);
       this.el.classList.toggle('no-card-border', L.cardBorder === false);
       // Caminhos de imagens vindos do registro central (assets.js), com fallback.
-      // Os móveis usam o mesmo visual de "recorte" do gato (contorno + sombra);
-      // foto JPG sem transparência vira um cartão de foto.
+      // Os móveis usam o mesmo visual de "recorte" do gato (sombra; contorno se
+      // pet.look.outline); foto JPG sem transparência vira um cartão de foto.
       for (const img of U.$$('img[data-asset]')) {
         G.media.img(img, img.dataset.asset);
         img.classList.add('cut');
@@ -45,6 +46,7 @@
       }
       this.applyFurniture();
       this.measure();
+      this.loadBackground();
       let raf = 0;
       const onResize = () => {
         cancelAnimationFrame(raf);
@@ -62,20 +64,28 @@
       this.u = Math.min(this.W / 100, (this.H * 0.56) / 100);
       const cfg = G.config.pet;
       this.petW = this.petH = U.clamp(this.u * cfg.size, cfg.minSizePx, cfg.maxSizePx);
+      // unidade dos OBJETOS (móveis, brinquedos): segue a escala do gato, para a
+      // cama nunca ficar menor que ele (celular deitado, telas muito largas…)
+      this.ou = this.petW / cfg.size;
 
       const s = this.el.style;
       s.setProperty('--u', this.u.toFixed(3) + 'px');
+      s.setProperty('--ou', this.ou.toFixed(3) + 'px');
       s.setProperty('--pet-w', this.petW.toFixed(1) + 'px');
       s.setProperty('--pet-h', this.petH.toFixed(1) + 'px');
 
-      const margin = this.petW * 0.36;
+      const g = GEO();
+      s.setProperty('--floor-top', (g.floorTop * 100).toFixed(2) + '%');
+      // paredes: o cartão de foto é mais largo que um gato recortado
+      const card = /\.jpe?g($|\?)/i.test((cfg.images && cfg.images.normal) || '');
+      const margin = this.petW * (card ? 0.47 : 0.36);
       this.geo = {
-        zMin: this.H * GEO.zMin,
-        zMax: this.H * GEO.zMax,
+        zMin: this.H * g.zMin,
+        zMax: this.H * g.zMax,
         minX: margin,
         maxX: this.W - margin,
-        top: this.H * GEO.topMargin,
-        floorTop: this.H * 0.556
+        top: this.H * g.topMargin,
+        floorTop: this.H * g.floorTop
       };
       this.measureZones();
     },
@@ -89,8 +99,14 @@
         const w = el.offsetWidth, h = el.offsetHeight;
         return { x0: x, y0: y, x1: x + w, y1: y + h, w, h };
       }
+      return this.screenRectOf(el);
+    },
+
+    /** Caixa do elemento como aparece na tela (com transforms: brinquedos, pet…) */
+    screenRectOf(el) {
       const r = el.getBoundingClientRect();
-      return { x0: r.left - this.left, y0: r.top - this.top, x1: r.right - this.left, y1: r.bottom - this.top, w: r.width, h: r.height };
+      const o = this.el.getBoundingClientRect();
+      return { x0: r.left - o.left, y0: r.top - o.top, x1: r.right - o.left, y1: r.bottom - o.top, w: r.width, h: r.height };
     },
 
     measureZones() {
@@ -131,6 +147,18 @@
       q('.tub-front').style.zIndex = Math.round(tub.y1) + 2;
     },
 
+    /** Foto de fundo opcional (assets.js → room.background). Sem ela: colagem de papel. */
+    async loadBackground() {
+      const src = await G.media.firstImage('room.background');
+      if (!src) return;
+      const img = this.el.querySelector('.backdrop-photo');
+      if (!img) return;
+      img.src = src;
+      img.hidden = false;
+      this.el.classList.add('has-photo');
+      gsap.fromTo(img, { opacity: 0 }, { opacity: 1, duration: 0.6, ease: 'power1.out' });
+    },
+
     /** Ajustes das imagens dos móveis (petConfig → furniture) viram variáveis CSS */
     applyFurniture() {
       const F = G.config.furniture || {};
@@ -145,6 +173,7 @@
         s.setProperty('--water-right', pct(w.right ?? 0.07));
         s.setProperty('--water-h', pct(w.height ?? 0.17));
       }
+      if (F.bowl) s.setProperty('--bowl-front', pct(F.bowl.frontClip ?? 0.47));
       if (F.bowl && F.bowl.food) {
         const f = F.bowl.food;
         s.setProperty('--food-left', pct(f.left ?? 0.17));

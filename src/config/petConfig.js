@@ -3,7 +3,8 @@
    --------------------------------------------------------------------------
    As REGRAS do jogo moram aqui: ritmo das necessidades, física, comidas,
    comportamento, brinquedos… Ajuste valores à vontade.
-   • Nome, falas do pet e nomes dos brinquedos → src/config/personal.js
+   • Nome do pet e nomes dos brinquedos       → src/config/personal.js
+   • Símbolos que ele mostra (não fala)        → src/systems/expressions.js
    • Caminhos de imagens e sons               → src/config/assets.js
    ========================================================================== */
 (function (G) {
@@ -54,7 +55,8 @@
 
       /* Visual de "recorte de foto" (feito no navegador, sem editar os arquivos).
          Quando o jogo roda num servidor (ou hospedado), as imagens são
-         processadas num canvas: contorno de adesivo, sombra e tamanho igualado.
+         processadas num canvas: cartão com cantos arredondados, sombra e
+         tamanho igualado (e contorno de adesivo, se ligar outline).
          Abrindo o index.html direto (file://), o navegador não deixa ler os
          pixels: aí o contorno vem do CSS e o autoFit fica desligado. */
       look: {
@@ -87,7 +89,7 @@
       flipWhenWalking: 'auto',
 
       // Tamanho do pet em "unidades do quarto" (1u ≈ 1% da largura do quarto)
-      size: 38,
+      size: 40,
       minSizePx: 116,
       maxSizePx: 196,
 
@@ -95,7 +97,7 @@
       footOffset: 0.02,
 
       // Onde ficam cabeça/olhos/pescoço na imagem (frações 0–1 da caixa do pet).
-      // Usado para balões, partículas e acessórios. Com cartões de foto, o
+      // Usado para balões e partículas. Com cartões de foto, o
       // cartão ocupa quase a caixa toda: "top" fica logo acima dele.
       anchors: {
         head: { x: 0.50, y: 0.22 },
@@ -142,25 +144,32 @@
     physics: {
       intensity: 1,              // multiplicador geral (0.5 = mais contido, 1.5 = mais exagerado)
 
-      // Acompanhar o dedo (Anime.js createAnimatable)
-      followLag: 95,             // ms de atraso pet ↔ dedo (sensação de peso)
-      followEase: 'out(3)',
-      liftHeight: 16,            // quanto o pet "sobe" ao ser pego
+      // Pegar no colo
+      liftHeight: 16,            // quanto a sombra "descola" do pet ao ser pego (o ponto agarrado fica no dedo)
+      liftScale: 1.05,           // o pet cresce um tiquinho em volta do dedo ao ser pego ("descolar")
       dragThreshold: 7,          // px até considerar arraste (abaixo disso é toque)
-      rubberBand: 0.18,          // resistência ao arrastar além da parede
 
-      // Inclinação e deformação durante o arraste
-      tiltPerSpeed: 0.022,       // graus por px/s
-      maxTilt: 34,
-      tiltLag: 420,              // duração do elástico de inclinação (ms)
-      tiltEase: 'outElastic(1, .55)',
-      stretchPerSpeed: 0.00011,  // deformação por px/s
-      maxStretch: 0.16,
-      // "efeito papel": a foto recortada entorta (skew) quando é arrastada rápido
-      skewPerSpeed: 0.0045,      // graus por px/s
-      maxSkew: 8,
-      dangle: 3.2,               // balanço (graus) quando fica pendurado parado no ar
-      photoDeform: 0.4,          // com FOTO (cartão), entortar/balançar é multiplicado por isto
+      // ARRASTE = simulação de molas (physics.js → stepDrag). freq em Hz
+      // (menor = mais mole/lento), damping 0–1 (menor = balança mais vezes).
+      drag: {
+        follow: 9,               // mola que puxa o ponto agarrado até o dedo (maior = mais grudado)
+        followDamping: 0.82,
+        swing: 2.2,              // "rigidez" do balanço em volta do dedo (menor = pêndulo mais solto)
+        swingDamping: 0.36,      // maior = assenta mais rápido (menos balançadas)
+        weight: 0.8,             // peso: segurada pela pontinha, a foto pende um pouco
+        maxSwing: 30,            // graus
+        softness: 4500,          // movimentos pequenos quase não balançam (maior = mais contido)
+        jiggle: 3.4,             // estica-e-achata (geleca)
+        jiggleDamping: 0.26,
+        stretch: 1.1,            // quanto estica/achata
+        bend: 2.6,               // "envergar" do papel
+        bendDamping: 0.3,
+        bendAmount: 0.75,
+        photo: 0.8               // fotos (cartões) esticam/envergam um pouco menos que recortes
+      },
+      maxSkew: 8,                // envergada máxima (graus; no arraste até ~1,4×)
+      photoDeform: 0.4,          // com FOTO (cartão), giros dos humores e trancos são multiplicados por isto
+      photoSquash: 0.3,          // com FOTO, esticar/achatar (pousos, pulos, cutucões) é multiplicado por isto
 
       // Soltar / arremessar
       velocityWindow: 90,        // ms usados para medir a velocidade do dedo
@@ -182,12 +191,12 @@
       airStretchPerSpeed: 0.00009,
 
       // Molas (Anime.js spring)
-      settleSpring: { mass: 1, stiffness: 230, damping: 9 },    // geleca ao pousar
-      tiltSpring:   { mass: 1, stiffness: 120, damping: 6.5 },  // balanço ao soltar
-      poseSpring:   { mass: 1, stiffness: 170, damping: 14 },
+      settleSpring: { mass: 1, stiffness: 210, damping: 10.5 }, // geleca ao pousar
+      tiltSpring:   { mass: 1, stiffness: 120, damping: 9 },    // balanço ao soltar / voltar a ficar reto
+      poseSpring:   { mass: 1, stiffness: 150, damping: 15 },   // mudar de pose (macio, sem passar do ponto)
 
       // Profundidade (2.5D): pet menor no fundo do quarto
-      depthScaleBack: 0.84,
+      depthScaleBack: 0.8,
       depthScaleFront: 1.0,
 
       // Detecção de chacoalhar
@@ -243,6 +252,20 @@
     },
 
     /* ----------------------------------------------------------------------
+       QUARTO — onde fica o chão (frações da altura do quarto, 0 = topo)
+       floorTop: onde o papel do chão começa (a "linha" entre parede e chão)
+       zMin / zMax: faixa onde as patas do pet podem pisar (fundo → frente)
+       Com uma foto de fundo (assets.js → room.background), ajuste estes
+       valores para o chão da foto.
+       ---------------------------------------------------------------------- */
+    room: {
+      floorTop: 0.45,
+      zMin: 0.52,
+      zMax: 0.952,
+      topMargin: 0.015           // até onde ele pode ser arremessado para cima
+    },
+
+    /* ----------------------------------------------------------------------
        MÓVEIS DO CHÃO — ajuste quando trocar as imagens
        frontClip: a partir de que altura (0–1, de cima para baixo) a imagem
        fica NA FRENTE do pet (ex.: a borda da cama, a lateral da banheira).
@@ -250,7 +273,8 @@
     furniture: {
       bed:     { frontClip: 0.8 },
       bathtub: { frontClip: 0.39, water: { top: 0.285, left: 0.07, right: 0.07, height: 0.17 } },
-      bowl:    { food: { left: 0.17, top: -0.36, width: 0.66, height: 0.66 } }  // onde a comida aparece
+      // frontClip: de que altura para baixo a borda do pote fica NA FRENTE da comida
+      bowl:    { frontClip: 0.47, food: { left: 0.22, top: -0.18, width: 0.56, height: 0.63 } }  // onde a comida aparece
     },
 
     /* ----------------------------------------------------------------------
@@ -319,26 +343,12 @@
     },
 
     /* ----------------------------------------------------------------------
-       PROGRESSO / DESBLOQUEIOS
+       PROGRESSO — nível de amizade (bolinhas no nome e barra no caderninho)
        ---------------------------------------------------------------------- */
     progress: {
       // XP total necessário para cada nível de amizade
       levels: [0, 12, 35, 70, 120, 190, 280, 400],
       petXpPerSecond: 0.4
-    },
-
-    /* ----------------------------------------------------------------------
-       PERSONALIZAÇÃO — adicione novas opções aqui
-       ---------------------------------------------------------------------- */
-    customization: {
-      accessories: [
-        { id: 'none',     label: 'nada',     level: 0 },
-        { id: 'bandana',  label: 'bandana',  level: 0, anchor: 'neck', width: 0.46, dy: 0 },
-        { id: 'bow',      label: 'lacinho',  level: 1, anchor: 'head', width: 0.24, dx: 0.17, dy: -0.02, rotate: 12 },
-        { id: 'glasses',  label: 'óculos',   level: 2, anchor: 'eyes', width: 0.48, dy: 0 },
-        { id: 'partyHat', label: 'festa',    level: 3, anchor: 'head', width: 0.2,  dx: -0.12, dy: -0.11, rotate: -14 },
-        { id: 'crown',    label: 'flores',   level: 4, anchor: 'head', width: 0.56, dy: -0.04 }
-      ]
     },
 
     /* ----------------------------------------------------------------------
@@ -348,7 +358,8 @@
        ---------------------------------------------------------------------- */
     audio: {
       enabledByDefault: true,
-      volume: 0.55
+      volume: 0.55,
+      haptics: true              // vibraçãozinha no celular ao pegar, bater, pousar (som desligado = sem vibração)
     },
 
     /* ----------------------------------------------------------------------

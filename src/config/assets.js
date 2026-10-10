@@ -12,7 +12,7 @@
        (fallback) e continua funcionando.
 
    Todos os objetos usam o mesmo esquema do gato: PNG com fundo transparente
-   (recortado) fica perfeito; o contorno de adesivo e a sombra são do jogo.
+   (recortado) fica perfeito; a sombra no chão é do jogo.
    Caminhos são relativos ao index.html (funciona em subpastas e via file://).
    ========================================================================== */
 (function (G) {
@@ -60,7 +60,11 @@
     room: {
       bed:     'assets/room/bed.png',
       bowl:    'assets/room/bowl.png',
-      bathtub: 'assets/room/bathtub.png'
+      bathtub: 'assets/room/bathtub.png',
+      // OPCIONAL: foto de um ambiente de verdade atrás de tudo (parede + chão).
+      // Sem o arquivo, o quarto é uma colagem de papel (parede clara + chão de
+      // papel kraft). Com a foto, ajuste o chão em petConfig → room.
+      background: 'assets/room/background.jpg'
     },
 
     food: {
@@ -78,14 +82,6 @@
       toy01:   'assets/toys/toy-01.png',    // brinquedo com nome engraçado
       toy02:   'assets/toys/toy-02.png',    // (desligado — ligue em personal.js → toys)
       toy03:   'assets/toys/toy-03.png'     // (desligado — ligue em personal.js → toys)
-    },
-
-    accessories: {
-      bandana:  'assets/accessories/bandana.svg',
-      bow:      'assets/accessories/bow.svg',
-      glasses:  'assets/accessories/glasses.svg',
-      partyHat: 'assets/accessories/party-hat.svg',
-      crown:    'assets/accessories/flower-crown.svg'
     },
 
     /* ----------------------------------------------------------------------

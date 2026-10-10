@@ -10,11 +10,17 @@ voltar o contorno branco de adesivo: `petConfig.js → pet.look.outline: true`).
 JPG sem recorte também funciona: vira um "cartão de foto" em pé, sem borda
 (borda branca: `pet.look.cardBorder: true`).
 
-As imagens atuais têm uma fita com o nome do próprio arquivo: quando você vê a fita
-no jogo, sabe exatamente qual arquivo está aparecendo.
+Os placeholders desenhados têm uma fita com o nome do próprio arquivo: quando você vê
+a fita no jogo, sabe exatamente qual arquivo está aparecendo.
 
 Se um arquivo faltar ou não abrir, o jogo usa uma alternativa e continua funcionando
 (o pet usa outra expressão; objetos mostram um "?" com o nome do arquivo que falta).
+
+**Tamanho das imagens:** não precisa (nem vale a pena) usar fotos gigantes. Móveis e
+brinquedos aparecem com uns 100–250 px de largura: **500–700 px de largura** já fica
+nítido até em tela de celular boa, e carrega bem mais rápido. (A cama e o ratinho
+originais tinham mais de 1 MB cada; foram reduzidos para ~500 px sem perder qualidade —
+os originais estão guardados em `../pepito-originais-2026-10-10/`.)
 
 ---
 
@@ -23,8 +29,12 @@ Se um arquivo faltar ou não abrir, o jogo usa uma alternativa e continua funcio
 - `pet/being-held.jpg` — a única foto do gato que ainda não existe (no colo / sendo
   arrastado / susto). Enquanto ela não existir, o jogo usa a foto de `excited`.
   Basta colocar o arquivo com esse nome.
-- `room/bed.png`, `room/bowl.png`, `room/bathtub.png`, brinquedos e comidas ainda são
-  placeholders desenhados (com a fita do nome).
+- `food/*.png` (ração, petisco, especial, favorita) ainda são **desenhos placeholder**:
+  são a única coisa que destoa das fotos. Fotos recortadas (PNG transparente) de
+  comida de verdade — um punhado de ração, um sachê, um petisco — vão combinar muito mais.
+- `toys/` — só o ratinho está ligado (os outros estão comentados em `petConfig.js → toys`).
+- `room/background.jpg` — **opcional**: uma foto de um ambiente de verdade para o fundo
+  (veja a seção 3).
 
 Depois procure por `[` em `src/config/personal.js` e troque os textos.
 
@@ -71,13 +81,14 @@ caminho em `src/config/assets.js → pet`.
 
 ---
 
-## 3. `room/` — móveis do chão
+## 3. `room/` — o quarto e os móveis do chão
 
 | arquivo | o que é | dica |
 |---|---|---|
-| `bed.png` | caminha (toque → ele vai dormir se estiver cansado) | o jogo usa a mesma imagem atrás e na frente do gato. A parte de baixo (a partir de 80% da altura) fica **na frente** dele; ajuste em `petConfig.js → furniture.bed.frontClip` |
+| `bed.png` | caminha (toque → ele dorme se estiver cansado, ou só vai lá se ajeitar) | o jogo usa a mesma imagem atrás e na frente do gato. A parte de baixo (a partir de 80% da altura) fica **na frente** dele; ajuste em `petConfig.js → furniture.bed.frontClip` |
 | `bowl.png` | pote de comida (toque → menu de comidas) | onde a comida aparece: `furniture.bowl.food` |
-| `bathtub.png` | banheira (solte o gato dentro → banho) | a lateral (a partir de 39%) fica na frente do gato: `furniture.bathtub.frontClip`; a água: `furniture.bathtub.water` |
+| `bathtub.png` | banheira (toque → ele vai pro banho se estiver sujinho; ou solte o gato dentro) | a lateral (a partir de 39%) fica na frente do gato: `furniture.bathtub.frontClip`; a água: `furniture.bathtub.water` |
+| `background.jpg` | **opcional** — foto de um ambiente de verdade, atrás de tudo | sem ela, o quarto é uma colagem de papel (parede + chão kraft). Use uma foto em pé (retrato), tipo 1080×1920; ela é recortada para cobrir a tela, ancorada embaixo. Depois ajuste onde fica o chão da foto em `petConfig.js → room` |
 
 ## 4. `toys/` — brinquedos (todos arrastáveis e arremessáveis)
 
@@ -95,14 +106,9 @@ caminho em `src/config/assets.js → pet`.
 `kibble.png` (ração), `treat.png` (petisco), `special.png` (especial) e `food-01.png`
 (comida favorita, nome em `personal.js → foods`). Aparecem no menu do pote e dentro dele.
 
-## 6. `accessories/`
-
-Acessórios do caderninho (bandana, lacinho, óculos…), em SVG. Podem virar PNG:
-troque o caminho em `assets.js → accessories`.
-
 ---
 
-## 7. `sounds/`
+## 6. `sounds/`
 
 Sem nenhum arquivo, todos os sons são sintetizados. Coloque `sounds/meow.mp3` e todos os
 miados viram o seu. Para variações, grave mais miados e liste em

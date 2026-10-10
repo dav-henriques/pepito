@@ -90,6 +90,27 @@
 
     reducedMotion: (() => {
       try { return matchMedia('(prefers-reduced-motion: reduce)').matches; } catch (e) { return false; }
-    })()
+    })(),
+
+    /** Texto ainda não personalizado? ("[NOME DA PELÚCIA]") */
+    isPlaceholder: (s) => /^\s*\[[^\]]*\]\s*$/.test(String(s ?? ''))
   };
+
+  /** Vibraçãozinha no celular (Android; o iPhone ignora). Segue o botão de som:
+      som desligado = sem vibração. Desligar de vez: petConfig → audio.haptics */
+  G.haptic = function (ms = 10) {
+    if (G.config && G.config.audio && G.config.audio.haptics === false) return;
+    if (G.audio && !G.audio.enabled) return;
+    try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) { /* ok */ }
+  };
+
+  /* Placeholders [ASSIM] aparecem (em amarelo) só enquanto você monta o
+     presente: abrindo pelo computador (arquivo ou servidor local) ou com
+     ?rascunho=1. Publicado num site, eles somem — ela nunca vê "[SEU NOME]".
+     ?rascunho=0 esconde também no computador. */
+  U.showPlaceholders = (() => {
+    const p = U.param('rascunho');
+    if (p !== null) return p !== '0';
+    return location.protocol === 'file:' || /^(localhost|127\.|\[::1\]|192\.168\.|10\.)/.test(location.hostname);
+  })();
 })(window.Game = window.Game || {});

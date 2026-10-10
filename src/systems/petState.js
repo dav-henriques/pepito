@@ -17,7 +17,7 @@
      mood: nome da animação idle (GSAP) em animation.js */
   const STATES = {
     dizzy:        { priority: 120, image: 'dizzy',      mood: 'dizzy' },
-    beingDragged: { priority: 100, image: 'beingHeld',  mood: 'held' },
+    beingDragged: { priority: 100, image: 'beingHeld',  mood: 'none' },   // no colo quem mexe é a física (molas)
     airborne:     { priority: 98,  image: 'flying',     mood: 'none' },
     beingHeld:    { priority: 97,  image: null,         mood: null },     // apenas pressionado: mantém expressão atual
     bathing:      { priority: 90,  image: 'bathing',    mood: 'bathing' },

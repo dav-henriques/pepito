@@ -29,7 +29,15 @@
   function updateRings(v) {
     for (const k in rings) {
       const val = U.clamp(v[k] ?? 0, 0, 100);
-      gsap.to(rings[k].bar, { strokeDashoffset: CIRC * (1 - val / 100), duration: 0.6, ease: 'power2.out', overwrite: true });
+      // as necessidades mudam um tiquinho a cada segundo: só redesenha o anel
+      // quando a diferença aparece de verdade (antes animava o SVG o tempo todo)
+      const r = rings[k];
+      if (r.last === undefined || Math.abs(val - r.last) >= 0.6) {
+        const big = r.last === undefined || Math.abs(val - r.last) > 3;
+        r.last = val;
+        if (big) gsap.to(r.bar, { strokeDashoffset: CIRC * (1 - val / 100), duration: 0.6, ease: 'power2.out', overwrite: true });
+        else gsap.set(r.bar, { strokeDashoffset: CIRC * (1 - val / 100), overwrite: true });
+      }
       const low = G.needs.level(k) !== 'ok';
       if (low !== lowState[k]) {
         lowState[k] = low;
@@ -51,16 +59,16 @@
   }
 
   /* ---------------- estado do pet (linha fixa no topo) ---------------- */
-  let statusEl = null, statusText = '';
+  let statusEl = null, statusTextEl = null, statusText = '';
   function updateStatus(instant) {
     const text = `${G.config.pet.name} está ${MOOD_TEXT[G.petState.display.state] || 'por aí'}`;
     if (text === statusText) return;
     statusText = text;
     gsap.killTweensOf(statusEl);
-    if (instant || U.reducedMotion) { statusEl.textContent = text; gsap.set(statusEl, { opacity: 1, y: 0 }); return; }
+    if (instant || U.reducedMotion) { statusTextEl.textContent = text; gsap.set(statusEl, { opacity: 1, y: 0 }); return; }
     gsap.timeline()
       .to(statusEl, { opacity: 0, y: -4, duration: 0.12, ease: 'power1.in' })
-      .add(() => { statusEl.textContent = statusText; })
+      .add(() => { statusTextEl.textContent = statusText; })
       .to(statusEl, { opacity: 1, y: 0, duration: 0.25, ease: 'back.out(2)' });
   }
 
@@ -174,6 +182,7 @@
       hintEl = document.getElementById('hint');
       toastEl = document.getElementById('toast');
       statusEl = document.getElementById('status-line');
+      statusTextEl = statusEl.appendChild(U.h('span'));
       gsap.set(hintEl, { xPercent: -50 });
       gsap.set(toastEl, { xPercent: -50 });
       hintEl.style.transform = toastEl.style.transform = '';
@@ -218,7 +227,7 @@
       G.bus.on('needs:change', updateRings);
       G.bus.on('progress:level', ({ level }) => {
         renderName();
-        this.toast(`amizade nível ${level} · novidades na personalização`, 'paw');
+        this.toast(`amizade nível ${level}`, 'paw');
         G.audio.play('chime');
         gsap.fromTo('#name-chip', { scale: 1.2 }, { scale: 1, duration: 0.8, ease: 'elastic.out(1, .35)' });
       });
@@ -250,13 +259,15 @@
     /** Etiquetinha de texto perto de um elemento (ex.: nome de um brinquedo) */
     tag(el, text, ms = 2400) {
       if (!el || !text) return;
-      const r = G.room.rectOf(el);
+      const ph = U.isPlaceholder(text);
+      if (ph && !U.showPlaceholders) return;
+      const r = G.room.screenRectOf(el);
       const t = U.h('div', { class: 'name-tag', text });
-      if (/^\[.*\]$/.test(String(text).trim())) t.classList.add('placeholder');
+      if (ph) t.classList.add('placeholder');
       document.getElementById('ui').appendChild(t);
       const w = t.offsetWidth;
       const x = U.clamp((r.x0 + r.x1) / 2 - w / 2, 8, G.room.W - w - 8);
-      const y = Math.max(60, r.y0 - t.offsetHeight - 6);
+      const y = Math.max(104, r.y0 - t.offsetHeight - 6);
       gsap.set(t, { x, y, rotation: U.rand(-4, 4) });
       gsap.timeline({ onComplete: () => t.remove() })
         .fromTo(t, { scale: 0.4, opacity: 0, y: y + 10 }, { scale: 1, opacity: 1, y, duration: 0.35, ease: 'back.out(2.5)' })

@@ -1,55 +1,22 @@
 /* ==========================================================================
    CADERNINHO (folha inferior, GSAP)
-   Nome, acessório, volume e estatísticas. Acessórios desbloqueiam com a
-   amizade. Opções novas: petConfig.customization (+ assets.js).
+   Nome, volume e estatísticas.
    ========================================================================== */
 (function (G) {
   'use strict';
   const U = G.util;
 
-  const custom = { name: null, accessory: 'none' };
+  const custom = { name: null };
   let sheet = null, backdrop = null;
   let resetArmed = 0;
-
-  function C() { return G.config.customization; }
 
   /* ---------------- aplicar ---------------- */
   function applyName(name) {
     if (name) G.config.pet.name = name;
     G.hud.renderName();
   }
-  function applyAll() {
-    applyName(custom.name);
-    G.anim.setAccessory(custom.accessory);
-  }
 
   /* ---------------- UI ---------------- */
-  function optionButton(item, kind, selected, content) {
-    const unlocked = G.progress.isUnlocked(item);
-    const b = U.h('button', { class: 'opt' + (selected ? ' selected' : '') + (unlocked ? '' : ' locked'), 'aria-label': item.label });
-    if (content) b.appendChild(content);
-    b.appendChild(U.h('span', { text: unlocked ? item.label : 'nv ' + item.level }));
-    if (!unlocked) b.appendChild(G.icon('lock', 'lk'));
-    b.addEventListener('click', () => {
-      if (!unlocked) {
-        gsap.fromTo(b, { x: -6 }, { x: 0, duration: 0.5, ease: 'elastic.out(1, .3)' });
-        G.audio.play('tap');
-        return;
-      }
-      custom[kind] = item.id;
-      if (kind === 'accessory') {
-        G.anim.setAccessory(item.id);
-        if (item.id !== 'none') { G.petState.emote('happy', 1600); G.physics.hop(14); }
-      }
-      b.parentElement.querySelectorAll('.opt').forEach((o) => o.classList.remove('selected'));
-      b.classList.add('selected');
-      gsap.fromTo(b, { scale: 0.9 }, { scale: 1, duration: 0.4, ease: 'back.out(3)' });
-      G.audio.play('pop', { v: 0.6 });
-      G.save.soon();
-    });
-    return b;
-  }
-
   function build() {
     const p = G.progress;
     const lv = p.level();
@@ -80,15 +47,6 @@
     input.addEventListener('change', saveName);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { input.blur(); saveName(); } });
     el.appendChild(U.h('div', { class: 'name-row' }, [input]));
-
-    // acessórios
-    el.appendChild(U.h('h3', { text: 'acessório' }));
-    const acc = U.h('div', { class: 'options' });
-    for (const a of C().accessories) {
-      const img = a.id === 'none' ? null : U.h('img', { src: G.asset('accessories.' + a.id), alt: '' });
-      acc.appendChild(optionButton(a, 'accessory', custom.accessory === a.id, img));
-    }
-    el.appendChild(acc);
 
     // som
     el.appendChild(U.h('h3', { text: 'som' }));
@@ -132,7 +90,7 @@
     footer.append(reset, close);
     el.appendChild(footer);
     const by = (G.personal && G.personal.madeBy) || '';
-    if (by) el.appendChild(U.h('p', { class: 'signature', text: `feito à mão por ${by}` }));
+    if (by && (U.showPlaceholders || !U.isPlaceholder(by))) el.appendChild(U.h('p', { class: 'signature', text: `feito à mão por ${by}` }));
 
     // arrastar para baixo para fechar
     let startY = null, dy = 0;
@@ -163,7 +121,7 @@
     ui.append(backdrop, sheet);
     gsap.to(backdrop, { opacity: 1, duration: 0.3 });
     gsap.fromTo(sheet, { yPercent: 105 }, { yPercent: 0, duration: 0.5, ease: 'expo.out' });
-    gsap.from(sheet.querySelectorAll('h3, .options, .stats, .name-row'), { y: 14, opacity: 0, duration: 0.4, stagger: 0.03, delay: 0.12, ease: 'power2.out' });
+    gsap.from(sheet.querySelectorAll('h3, .sound-box, .stats, .name-row'), { y: 14, opacity: 0, duration: 0.4, stagger: 0.03, delay: 0.12, ease: 'power2.out' });
     G.audio.play('pop', { v: 0.5 });
   }
 
@@ -182,12 +140,10 @@
       G.save.register('custom', {
         get: () => ({ ...custom }),
         set: (d) => {
-          if (!d) return;
-          if (typeof d.name === 'string') custom.name = d.name;
-          if (typeof d.accessory === 'string') custom.accessory = d.accessory;
+          if (d && typeof d.name === 'string') custom.name = d.name;
         }
       });
-      applyAll();
+      applyName(custom.name);
     },
     open,
     close: closeSheet,

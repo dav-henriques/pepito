@@ -7,14 +7,13 @@
    • ajustes por imagem (petConfig → pet.imageTweaks)
    • "humor": animações idle por estado na camada .pet-mood
      (respirar, quicar, coçar, cochilar, encarar…) — sem tocar na imagem
-   • acessórios posicionados pelos anchors do config
    A física (Anime.js) mexe nas camadas de fora; aqui só a camada de humor.
    ========================================================================== */
 (function (G) {
   'use strict';
   const U = G.util;
 
-  let petEl, moodEl, imgA, imgB, accEl, bubbleHost, foamEl;
+  let petEl, moodEl, imgA, imgB, bubbleHost, foamEl;
   let front = null, back = null;
   let currentSrc = '';
   let currentKey = null;
@@ -23,8 +22,6 @@
   let moodTimers = [];
   let swapToken = 0;
   const imgStatus = {};          // chave → 'ok' | 'missing' | 'loading'
-  let accessoryId = 'none';
-  let accImg = null;
 
   /* ---------------- imagens ---------------- */
   function preload() {
@@ -78,9 +75,12 @@
     return /\.jpe?g($|\?)/i.test(G.config.pet.images[key] || '');
   }
 
-  /** Giros dos "humores" ficam mais contidos numa foto (num retângulo grande
-      qualquer giro aparece muito e parece que a foto está torta) */
-  const R = (deg) => deg * (isCardKey(currentKey || G.petState.display.image) ? (G.config.physics.photoDeform ?? 0.4) : 1);
+  /** Os "humores" são pensados para a FOTO (figurinha): giros pequenos e escala
+      uniforme (foto esticada num eixo parece imagem distorcida). Num gato
+      recortado (PNG) dá para exagerar mais. */
+  const isCard = () => isCardKey(currentKey || G.petState.display.image);
+  const R = (deg) => deg * (isCard() ? 1 : 2.2);          // graus
+  const S = (amt) => 1 + amt * (isCard() ? 1 : 1.8);      // escala uniforme
 
   /** Classes de visual + ajuste fino da imagem (escala, posição, giro, espelho) */
   function applyLook(img, key) {
@@ -91,7 +91,7 @@
     img.classList.toggle('raw', raw);
     img.classList.toggle('framed', raw && L.frameOpaque !== false && /\.jpe?g($|\?)/i.test(path));
     const s = tw.scale || 1;
-    img._look = { s, sx: (tw.flip ? -1 : 1) * s };
+    img._look = { s, sx: (tw.flip ? -1 : 1) * s, rot: tw.rotate || 0 };
     gsap.set(img, {
       xPercent: (tw.x || 0) * 100, yPercent: (tw.y || 0) * 100,
       rotation: tw.rotate || 0, scaleX: img._look.sx, scaleY: s, transformOrigin: '50% 100%'
@@ -114,13 +114,16 @@
     applyLook(target, k);
     const show = () => {
       if (token !== swapToken) return;
-      const d = quick ? 0.08 : 0.18;
+      const d = quick ? 0.08 : 0.22;
       gsap.killTweensOf([front, back], 'opacity');
-      gsap.to(back, { opacity: 1, duration: d, ease: 'power1.out' });
-      gsap.to(front, { opacity: 0, duration: d, ease: 'power1.in' });
+      gsap.to(back, { opacity: 1, duration: d, ease: 'sine.out' });
+      gsap.to(front, { opacity: 0, duration: d, ease: 'sine.in' });
       if (pop) {
-        const L = back._look || { s: 1, sx: 1 };
-        gsap.fromTo(back, { scaleX: L.sx * 1.06, scaleY: L.s * 0.9 }, { scaleX: L.sx, scaleY: L.s, duration: 0.45, ease: 'back.out(3)' });
+        // figurinha nova "colada" por cima: cresce um tiquinho por igual, com uma
+        // giradinha, e assenta — sem achatar a foto
+        const L = back._look || { s: 1, sx: 1, rot: 0 };
+        gsap.fromTo(back, { scaleX: L.sx * 1.045, scaleY: L.s * 1.045, rotation: L.rot + U.rand(-1.6, 1.6) },
+          { scaleX: L.sx, scaleY: L.s, rotation: L.rot, duration: 0.5, ease: 'back.out(1.6)' });
       }
       const t = front; front = back; back = t;
       if (isCardKey(k)) G.physics.straighten();     // foto nunca fica espelhada
@@ -143,136 +146,195 @@
 
   function headPoint() { return G.physics.anchorPoint('top'); }
 
+  /** Auréola de estrelinhas girando em volta da cabeça (tontura).
+      Fica dentro do pet (anda junto com ele) e some quando o humor muda. */
+  function dizzyHalo() {
+    const host = U.h('div', { class: 'dizzy-halo' });
+    const stars = [0, 1, 2].map(() => host.appendChild(U.h('i', {}, [G.icon('star')])));
+    host.style.top = ((G.config.pet.anchors.top.y + 0.06) * 100) + '%';
+    petEl.appendChild(host);
+    const W = G.room.petW;
+    const rx = W * 0.27, ry = W * 0.07;
+    const st = { a: 0 };
+    const place = () => {
+      stars.forEach((s, i) => {
+        const t = st.a + (i * Math.PI * 2) / 3;
+        const front = (Math.sin(t) + 1) / 2;          // 0 = atrás da cabeça … 1 = na frente
+        gsap.set(s, { x: Math.cos(t) * rx, y: Math.sin(t) * ry, scale: 0.62 + 0.38 * front, opacity: 0.35 + 0.65 * front, rotation: t * 57.3 });
+      });
+    };
+    place();
+    const spin = gsap.to(st, { a: Math.PI * 2, duration: 1.4, ease: 'none', repeat: -1, onUpdate: place });
+    gsap.fromTo(host, { scale: 0.3, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.4, ease: 'back.out(2)' });
+    return {
+      kill: () => {
+        gsap.to(host, { scale: 0.5, opacity: 0, duration: 0.3, ease: 'power2.in', onComplete: () => { spin.kill(); host.remove(); } });
+      }
+    };
+  }
+
+  /** Tremidinha suave (coçar, esforço): vai e volta em curva, morrendo no fim */
+  function shimmy(el, amp, cycles = 3, half = 0.07) {
+    const tl = gsap.timeline();
+    for (let i = 0; i < cycles * 2; i++) {
+      const a = amp * (1 - i / (cycles * 2)) * (i % 2 ? -1 : 1);
+      tl.to(el, { x: a, duration: half, ease: 'sine.inOut' });
+    }
+    tl.to(el, { x: 0, duration: half * 1.4, ease: 'sine.out' });
+    return tl;
+  }
+
+  /* Todos em curva senoidal (sem trancos), ritmos de gente calma (≥ 0,3 s por
+     movimento), escala sempre por igual e giros de 1–3°. */
   const MOODS = {
     none() { return null; },
 
+    /* respirando */
     normal(el) {
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleY: 1.025, scaleX: 0.992, duration: 1.7, ease: 'sine.inOut' });
+        .to(el, { scale: S(0.012), y: -1, duration: 2.2, ease: 'sine.inOut' });
     },
 
+    /* contente: balança de leve de um lado pro outro, subindo um pouquinho */
     happy(el) {
-      const tl = gsap.timeline({ repeat: -1 });
-      tl.to(el, { scaleY: 1.035, scaleX: 0.99, rotation: R(2.2), duration: 0.55, ease: 'sine.inOut' })
-        .to(el, { scaleY: 1, scaleX: 1, rotation: 0, duration: 0.55, ease: 'sine.inOut' })
-        .to(el, { scaleY: 1.035, scaleX: 0.99, rotation: R(-2.2), duration: 0.55, ease: 'sine.inOut' })
-        .to(el, { scaleY: 1, scaleX: 1, rotation: 0, duration: 0.55, ease: 'sine.inOut' });
-      return tl;
+      return gsap.timeline({ repeat: -1 })
+        .to(el, { rotation: R(1.6), y: -2.5, scale: S(0.01), duration: 0.75, ease: 'sine.inOut' })
+        .to(el, { rotation: 0, y: 0, scale: 1, duration: 0.75, ease: 'sine.inOut' })
+        .to(el, { rotation: R(-1.6), y: -2.5, scale: S(0.01), duration: 0.75, ease: 'sine.inOut' })
+        .to(el, { rotation: 0, y: 0, scale: 1, duration: 0.75, ease: 'sine.inOut' });
     },
 
+    /* animado: pulinhos no lugar, alternando o lado */
     excited(el) {
       return gsap.timeline({ repeat: -1 })
-        .to(el, { y: -7, scaleY: 1.05, scaleX: 0.97, duration: 0.17, ease: 'power2.out' })
-        .to(el, { y: 0, scaleY: 0.95, scaleX: 1.04, duration: 0.17, ease: 'power2.in' })
-        .to(el, { scaleY: 1, scaleX: 1, duration: 0.12, ease: 'power1.out' });
+        .to(el, { y: -7, rotation: R(1.4), duration: 0.26, ease: 'sine.out' })
+        .to(el, { y: 0, rotation: 0, duration: 0.22, ease: 'sine.in' })
+        .to(el, { y: -7, rotation: R(-1.4), duration: 0.26, ease: 'sine.out' })
+        .to(el, { y: 0, rotation: 0, duration: 0.22, ease: 'sine.in' });
     },
 
+    /* brincalhão: rebola */
     playful(el) {
       return gsap.timeline({ repeat: -1 })
-        .to(el, { rotation: R(4), y: -2, duration: 0.42, ease: 'sine.inOut' })
-        .to(el, { rotation: R(-4), y: 0, duration: 0.42, ease: 'sine.inOut' });
+        .to(el, { rotation: R(2.2), y: -2, duration: 0.55, ease: 'sine.inOut' })
+        .to(el, { rotation: R(-2.2), y: 0, duration: 0.55, ease: 'sine.inOut' });
     },
 
+    /* dormindo: respiração lenta e funda + "z" */
     sleeping(el) {
       every(2000, 2800, () => {
         const p = headPoint();
         G.fx.spawn('z', p.x + 10, p.y + 18);
       });
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleY: 1.045, scaleX: 0.985, duration: 2.4, ease: 'sine.inOut' });
+        .to(el, { scale: S(0.018), y: -1, duration: 2.6, ease: 'sine.inOut' });
     },
 
+    /* comendo: acena com a cabeça, mastigando */
     eating(el) {
-      return gsap.timeline({ repeat: -1 })
-        .to(el, { y: 2.5, rotation: R(1.8), scaleY: 0.985, duration: 0.15, ease: 'power1.inOut' })
-        .to(el, { y: 0, rotation: R(-1.2), scaleY: 1, duration: 0.15, ease: 'power1.inOut' });
-    },
-
-    bathing(el) {
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { rotation: R(3), scaleY: 1.02, duration: 0.9, ease: 'sine.inOut' })
-        .to(el, { rotation: R(-3), scaleY: 1, duration: 0.9, ease: 'sine.inOut' });
+        .to(el, { y: 2, rotation: R(1.2), duration: 0.34, ease: 'sine.inOut' });
     },
 
+    /* no banho: balança devagar na água */
+    bathing(el) {
+      return gsap.timeline({ repeat: -1 })
+        .to(el, { rotation: R(1.8), y: -1, duration: 1.1, ease: 'sine.inOut' })
+        .to(el, { rotation: R(-1.8), y: 0, duration: 1.1, ease: 'sine.inOut' });
+    },
+
+    /* cansado: vai murchando devagar; de vez em quando boceja (cresce e volta) */
     tired(el) {
       every(9000, 16000, () => {
-        // bocejo: estica e volta
         gsap.timeline()
-          .to(el, { scaleY: 1.07, scaleX: 0.97, duration: 0.5, ease: 'sine.out' })
-          .to(el, { scaleY: 1, scaleX: 1, duration: 0.7, ease: 'sine.inOut' });
+          .to(el, { scale: S(0.03), y: -2, duration: 0.7, ease: 'sine.out' })
+          .to(el, { scale: 1, y: 0, duration: 0.9, ease: 'sine.inOut' });
         G.audio.play('yawn');
       });
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleY: 0.975, scaleX: 1.01, rotation: R(1.5), duration: 2.2, ease: 'sine.inOut' });
+        .to(el, { y: 2, rotation: R(1.2), duration: 2.4, ease: 'sine.inOut' });
     },
 
+    /* fraquinho (fome demais) */
     weak(el) {
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleY: 0.965, scaleX: 1.015, rotation: R(-1.5), duration: 2.4, ease: 'sine.inOut' });
+        .to(el, { y: 3, scale: S(-0.01), rotation: R(-1), duration: 2.6, ease: 'sine.inOut' });
     },
 
+    /* triste: murcha devagar */
     sad(el) {
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleY: 0.975, y: 1.5, duration: 2.6, ease: 'sine.inOut' });
+        .to(el, { y: 3, rotation: R(-0.8), duration: 2.8, ease: 'sine.inOut' });
     },
 
+    /* sujinho: coça de vez em quando (tremidinha macia) */
     itchy(el) {
-      every(2400, 4600, () => {
-        gsap.fromTo(el, { x: -2 }, { x: 2, duration: 0.05, repeat: 7, yoyo: true, ease: 'none', onComplete: () => gsap.set(el, { x: 0 }) });
+      every(2600, 4800, () => {
+        shimmy(el, 1.8, 3, 0.07);
         if (G.petState.condition === 'veryDirty') {
           const p = headPoint();
           G.fx.spawn('fly', p.x + U.rand(-30, 30), p.y + 20);
         }
       });
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleY: 1.02, scaleX: 0.995, duration: 1.6, ease: 'sine.inOut' });
+        .to(el, { scale: S(0.01), duration: 1.8, ease: 'sine.inOut' });
     },
 
+    /* susto: tremendo um pouquinho */
     held(el) {
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleX: 1.025, scaleY: 0.985, rotation: R(1.2), duration: 0.13, ease: 'sine.inOut' });
+        .to(el, { scale: S(0.012), rotation: R(0.8), duration: 0.2, ease: 'sine.inOut' });
     },
 
+    /* tonto: o corpo "roda" num círculo lento, sem paradas (como quem está
+       zonzo), e três estrelinhas giram em volta da cabeça (as de trás menores
+       e apagadinhas, as da frente maiores) — presas ao gato, nada solto pela tela */
     dizzy(el) {
-      every(380, 520, () => {
-        const p = headPoint();
-        G.fx.spawn('star', p.x + U.rand(-24, 24), p.y + 16, { angle: U.rand(-2.6, -0.5) });
+      moodTimers.push(dizzyHalo());
+      const o = { a: 0 };
+      return gsap.to(o, {
+        a: Math.PI * 2, duration: 1.6, ease: 'none', repeat: -1,
+        onUpdate: () => gsap.set(el, { x: Math.cos(o.a) * 2.6, y: Math.sin(o.a) * 1.4, rotation: R(2.2) * Math.sin(o.a + 0.7) })
       });
-      return gsap.timeline({ repeat: -1 })
-        .to(el, { rotation: R(7), x: 3, duration: 0.45, ease: 'sine.inOut' })
-        .to(el, { rotation: R(-7), x: -3, duration: 0.45, ease: 'sine.inOut' });
     },
 
+    /* emburrado: "bufa" (cresce por igual e solta) */
     grumpy(el) {
-      return gsap.timeline({ repeat: -1, repeatDelay: 0.6 })
-        .to(el, { scaleX: 1.05, scaleY: 1.03, duration: 0.5, ease: 'sine.out' })
-        .to(el, { scaleX: 1, scaleY: 1, duration: 0.8, ease: 'sine.inOut' });
+      return gsap.timeline({ repeat: -1, repeatDelay: 0.7 })
+        .to(el, { scale: S(0.025), duration: 0.6, ease: 'sine.out' })
+        .to(el, { scale: 1, duration: 0.9, ease: 'sine.inOut' });
     },
 
     /* encarando: totalmente imóvel… e se aproximando da tela bem devagar */
     staring(el) {
       return gsap.timeline({ repeat: -1, yoyo: true, repeatDelay: 0.8 })
-        .to(el, { scale: 1.045, duration: 3.2, ease: 'sine.inOut' });
+        .to(el, { scale: S(0.035), duration: 3.2, ease: 'sine.inOut' });
     },
 
     /* confuso: inclina a "cabeça" para um lado, segura, inclina pro outro */
     confused(el) {
-      return gsap.timeline({ repeat: -1, repeatDelay: 0.4 })
-        .to(el, { rotation: R(8), duration: 0.35, ease: 'back.out(2)' })
-        .to(el, { rotation: R(8), duration: 0.9 })
-        .to(el, { rotation: R(-5), duration: 0.4, ease: 'back.out(2)' })
-        .to(el, { rotation: R(-5), duration: 0.9 });
+      return gsap.timeline({ repeat: -1, repeatDelay: 0.3 })
+        .to(el, { rotation: R(3.5), duration: 0.55, ease: 'sine.inOut' })
+        .to(el, { rotation: R(3.5), duration: 0.9 })
+        .to(el, { rotation: R(-2.5), duration: 0.6, ease: 'sine.inOut' })
+        .to(el, { rotation: R(-2.5), duration: 0.9 });
     },
 
-    /* pose absurda: fica travado na pose, com tremidinhas de esforço */
+    /* pose absurda: travado na pose, com tremidinhas de esforço de vez em quando */
     silly(el) {
-      every(1500, 2600, () => {
-        gsap.fromTo(el, { x: -1.5 }, { x: 1.5, duration: 0.04, repeat: 5, yoyo: true, ease: 'none', onComplete: () => gsap.set(el, { x: 0 }) });
-      });
+      every(1600, 2800, () => shimmy(el, 1.2, 3, 0.05));
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleY: 1.02, rotation: R(-1.5), duration: 1.1, ease: 'sine.inOut' });
+        .to(el, { scale: S(0.015), rotation: R(-0.8), duration: 1.2, ease: 'sine.inOut' });
     }
   };
+
+  /** Humor que vale agora: no colo ou voando quem mexe no corpo é a física —
+      nenhum humor (ex.: a tontura) roda por cima, só depois de pousar */
+  function moodFor(display) {
+    const p = G.petState.physical;
+    if (p === 'beingDragged' || p === 'airborne') return 'none';
+    return display.mood || 'normal';
+  }
 
   function setMood(name) {
     if (name === currentMood) return;
@@ -281,26 +343,13 @@
     moodTimers.forEach((t) => t.kill());
     moodTimers = [];
     gsap.killTweensOf(moodEl);
-    gsap.to(moodEl, { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, duration: 0.25, ease: 'power1.out',
+    // volta ao neutro com calma e só então começa o humor novo (sem tranco)
+    gsap.to(moodEl, { x: 0, y: 0, rotation: 0, scaleX: 1, scaleY: 1, duration: 0.35, ease: 'sine.inOut',
       onComplete: () => {
         if (currentMood !== name) return;
         const fn = MOODS[name] || MOODS.normal;
         moodTl = U.reducedMotion ? null : fn(moodEl);
       }
-    });
-  }
-
-  /* ---------------- acessórios ---------------- */
-  function placeAccessory(stateName) {
-    if (!accImg) return;
-    const def = G.config.customization.accessories.find((a) => a.id === accessoryId);
-    if (!def || !def.anchor) return;
-    const a = G.config.pet.anchors[def.anchor];
-    const off = G.config.pet.anchorOffsets[stateName] || {};
-    gsap.to(accImg, {
-      left: ((a.x + (def.dx || 0) + (off.x || 0)) * 100) + '%',
-      top: ((a.y + (def.dy || 0) + (off.y || 0)) * 100) + '%',
-      duration: 0.25, ease: 'power2.out'
     });
   }
 
@@ -316,7 +365,6 @@
       moodEl = petEl.querySelector('.pet-mood');
       imgA = petEl.querySelector('.pet-img.a');
       imgB = petEl.querySelector('.pet-img.b');
-      accEl = petEl.querySelector('.pet-accessory');
       foamEl = petEl.querySelector('.pet-foam');
       bubbleHost = petEl.querySelector('.pet-bubble');
       front = imgA; back = imgB;
@@ -328,10 +376,11 @@
         const quick = display.state === 'beingDragged' || prev.state === 'beingDragged' || display.state === 'airborne';
         // "pop" sutil ao mudar de expressão
         swapImage(display.image, quick, !quick && !U.reducedMotion);
-        if (display.mood) setMood(display.mood);
-        placeAccessory(display.state);
+        setMood(moodFor(display));
         placeBubble(display.state);
       });
+      // largou / pousou: o humor do estado atual volta a valer (ex.: tontura)
+      G.bus.on('state:physical', () => setMood(moodFor(G.petState.display)));
 
       // a versão recortada da imagem atual ficou pronta depois → troca sem pulo
       G.bus.on('cutout:ready', ({ key }) => {
@@ -370,23 +419,6 @@
     /** A imagem que está aparecendo é uma foto (cartão)? */
     get isCard() { return isCardKey(currentKey || G.petState.display.image); },
 
-    setAccessory(id) {
-      accessoryId = id || 'none';
-      accEl.innerHTML = '';
-      accImg = null;
-      const def = G.config.customization.accessories.find((a) => a.id === accessoryId);
-      if (!def || accessoryId === 'none') return;
-      accImg = U.h('img', { src: G.asset('accessories.' + def.id), alt: '', draggable: 'false' });
-      accImg.style.width = (def.width * 100) + '%';
-      if (def.rotate) accImg.style.rotate = def.rotate + 'deg';
-      accEl.appendChild(accImg);
-      const a = G.config.pet.anchors[def.anchor];
-      const off = G.config.pet.anchorOffsets[G.petState.display.state] || {};
-      gsap.set(accImg, { xPercent: -50, yPercent: -50, left: ((a.x + (def.dx || 0) + (off.x || 0)) * 100) + '%', top: ((a.y + (def.dy || 0) + (off.y || 0)) * 100) + '%' });
-      gsap.fromTo(accImg, { scale: 0, rotation: -20 }, { scale: 1, rotation: 0, duration: 0.5, ease: 'back.out(2.5)' });
-    },
-
-    get accessory() { return accessoryId; },
     get foamLayer() { return foamEl; },
     setMood
   };

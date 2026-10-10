@@ -39,6 +39,7 @@
     const isPhoto = !/\.svg($|\?)/i.test(G.asset(def.asset || 'toys.' + id));
     const el = U.h('div', { class: 'toy ' + id + (def.plush ? ' plush' : '') + (isPhoto ? ' cutout' : ''), dataset: { hit: 'toy', toy: id }, role: 'button', 'aria-label': def.label });
     el.style.setProperty('--size', def.size);
+    el.style.transformOrigin = '50% 100%';
     if (def.heightRatio) el.style.setProperty('--hr', def.heightRatio);
     const im = U.h('img', { alt: '', draggable: 'false' });
     G.media.img(im, def.asset || 'toys.' + id);
@@ -60,7 +61,7 @@
   }
 
   function measureToy(t) {
-    t.w = G.room.u * t.def.size;
+    t.w = G.room.ou * t.def.size;
     t.hh = t.w * (t.def.heightRatio || 1);
   }
 
@@ -77,11 +78,10 @@
       }
       t.lastX = t.x;
       t.el.style.transform = `translate3d(${(t.x - t.w / 2).toFixed(1)}px,${(t.z - t.h - t.hh).toFixed(1)}px,0) scale(${s.toFixed(3)})`;
-      t.el.style.transformOrigin = '50% 100%';
       t.wrap.style.transform = t.def.roll ? `rotate(${t.rot.toFixed(1)}deg)` : `scaleX(${t.face}) rotate(${t.rot.toFixed(1)}deg)`;
-      const sw = G.room.u * 9;
+      const sw = G.room.ou * 9;
       const sc = U.clamp(1 - t.h / 220, 0.3, 1) * s;
-      t.shadow.style.transform = `translate3d(${(t.x - sw / 2).toFixed(1)}px,${(t.z - G.room.u * 1.2).toFixed(1)}px,0) scale(${sc.toFixed(3)})`;
+      t.shadow.style.transform = `translate3d(${(t.x - sw / 2).toFixed(1)}px,${(t.z - G.room.ou * 1.2).toFixed(1)}px,0) scale(${sc.toFixed(3)})`;
       t.shadow.style.opacity = U.clamp(1 - t.h / 260, 0.25, 1).toFixed(2);
       t.shadow.style.zIndex = Math.round(t.z) - 2;
       if (t.def.string) updateString(t);
@@ -260,29 +260,142 @@
     G.bus.emit('toy:move', t);
   }
 
-  /* ---------- gesto: arrastar brinquedo ---------- */
+  /** Muda o ponto de giro da imagem do brinquedo sem ele "pular" (compensa a
+      posição pelo giro/espelho atuais — mesma ideia do setRotOrigin do pet) */
+  function setToyOrigin(t, fx, fy) {
+    const o1 = t.origin || { x: 0.5, y: 0.5 };
+    const vx = (fx - o1.x) * t.w, vy = (fy - o1.y) * t.hh;
+    const r = t.rot / 57.29578, f = t.def.roll ? 1 : (t.face || 1);
+    const cos = Math.cos(r), sin = Math.sin(r);
+    // (I − S·R)·v, com S = espelho (scaleX) e R = giro, como no transform do wrap
+    const dx = vx - f * (vx * cos - vy * sin);
+    const dy = vy - (vx * sin + vy * cos);
+    const s = G.room.depthScale(t.z);
+    t.x -= dx * s;
+    t.h += dy * s;
+    t.origin = { x: fx, y: fy };
+    t.wrap.style.transformOrigin = `${(fx * 100).toFixed(1)}% ${(fy * 100).toFixed(1)}%`;
+    mark(t);
+  }
+
+  /* ---------- gesto: arrastar brinquedo ----------
+     Mesma física do gato, em versão menor: o ponto agarrado vem até o dedo
+     por uma mola, o brinquedo balança como pêndulo em volta do dedo e a
+     imagem faz geleca (estica/achata) com os trancos. */
   const toyHandler = {
     down(pt, e, el) {
       const t = toys[el.dataset.toy];
       if (!t) return null;
       killToy(t);
+      if (!t.def.roll) t.rot = (((t.rot + 180) % 360) + 360) % 360 - 180;   // mesmo ângulo, sem voltas extras
       const start = { ...pt, t: U.now() };
-      const off = { x: pt.x - t.x, y: pt.y - (t.z - t.h) };
+      const tilts = !t.def.roll;
+      // gira em volta de onde o dedo pegou (desfaz giro/espelho atuais para achar
+      // o ponto da imagem embaixo do dedo — o ratinho pode estar capotado)
+      if (tilts) {
+        const s = G.room.depthScale(t.z), o1 = t.origin || { x: 0.5, y: 0.5 };
+        const ox = t.x - (t.w * s) / 2 + o1.x * t.w * s, oy = t.z - t.h - t.hh * s + o1.y * t.hh * s;
+        const qx = (t.face || 1) * (pt.x - ox) / s, qy = (pt.y - oy) / s;
+        const r = t.rot / 57.29578, c = Math.cos(r), sn = Math.sin(r);
+        const vx = qx * c + qy * sn, vy = -qx * sn + qy * c;
+        setToyOrigin(t, U.clamp((o1.x * t.w + vx) / t.w, 0.1, 0.9), U.clamp((o1.y * t.hh + vy) / t.hh, 0.1, 0.9));
+      }
+      // onde o dedo pegou, "sem profundidade" (o brinquedo encolhe no fundo do quarto)
+      const s0 = G.room.depthScale(t.z);
+      const offL = { x: (pt.x - t.x) / s0, y: (pt.y - (t.z - t.h)) / s0 };
       let moved = false;
       const samples = [{ ...pt, t: U.now() }];
-      const qx = gsap.quickTo(t, 'x', { duration: 0.12, ease: 'power3.out', onUpdate: () => mark(t) });
-      const qz = gsap.quickTo(t, 'z', { duration: 0.12, ease: 'power3.out', onUpdate: () => mark(t) });
-      const qh = gsap.quickTo(t, 'h', { duration: 0.12, ease: 'power3.out', onUpdate: () => mark(t) });
       t.dragging = true;
       t.stolen = false;
       mark(t);
-      gsap.fromTo(t.wrap, { scale: 0.86 }, { scale: 1, duration: 0.4, ease: 'back.out(3)' });
+      const img = t.wrap.firstChild;
+      gsap.killTweensOf(img);
+      gsap.set(img, { transformOrigin: '50% 100%' });
       G.audio.play(t.def.sound === 'squeak' ? 'squeak' : 'pop', { pitch: 1.1 });
+      G.audio.play('peel', { v: 0.7 });
+      G.haptic(6);
       const geo = G.room.geo;
+      const lift = 8;      // a sombra descola um pouco enquanto ele está na mão
+
+      // ---- simulação (molas), um passo por quadro ----
+      const sim = {
+        finger: { x: pt.x, y: pt.y }, G: { x: pt.x, y: pt.y }, vG: { x: 0, y: 0 },
+        // ângulo atual entre −180° e 180° (capotado = desvira na mão, com a mola)
+        th: ((((t.rot + 180) % 360) + 360) % 360 - 180) / 57.29578, om: 0,
+        e: 0, ev: -1.9,                  // "apertou": achata e volta balançando
+        L: 1, Lv: 6                      // "descolou": cresce um tiquinho com uma molinha
+      };
+      let lastT = U.now();
+      const wF = Math.PI * 2 * 9.5, zF = 0.82;   // mola até o dedo
+      const wS = Math.PI * 2 * 2.6, zS = 0.34;   // balanço (firme: mexer pouco = balançar pouco)
+      const wJ = Math.PI * 2 * 4.2, zJ = 0.26;   // geleca
+      const wL = Math.PI * 2 * 3.5, zL = 0.4;    // "descolar"
+      const knee0 = 4500;                        // tranco pequeno quase não balança
+      const tick = () => {
+        if (!t.dragging || t.stolen) { gsap.ticker.remove(tick); return; }
+        const now = U.now();
+        const dt = U.clamp((now - lastT) / 1000, 0, 0.05);
+        lastT = now;
+        const s = G.room.depthScale(t.z) * sim.L;
+        const o = t.origin || { x: 0.5, y: 0.5 };
+        const rx0 = (0.5 - o.x) * t.w * s, ry0 = (0.5 - o.y) * t.hh * s;
+        const I = rx0 * rx0 + ry0 * ry0 + ((t.w * t.w + t.hh * t.hh) * s * s) / 12;
+        const g = moved ? 2000 : 0;
+        const n = U.clamp(Math.ceil(dt * 240), 1, 12), h = dt / n;
+        for (let i = 0; i < n; i++) {
+          let ax = 0, ay = 0;
+          if (moved) {
+            ax = wF * wF * (sim.finger.x - sim.G.x) - 2 * zF * wF * sim.vG.x;
+            ay = wF * wF * (sim.finger.y - sim.G.y) - 2 * zF * wF * sim.vG.y;
+            sim.vG.x += ax * h; sim.vG.y += ay * h;
+            sim.G.x += sim.vG.x * h; sim.G.y += sim.vG.y * h;
+          }
+          const am = Math.hypot(ax, ay), knee = am / (am + knee0);
+          if (tilts) {
+            const f = t.face || 1;
+            const cos = Math.cos(sim.th), sin = Math.sin(sim.th);
+            // giro visto na tela (o espelho inverte o sentido)
+            const rx = f * (rx0 * cos - ry0 * sin), ry = rx0 * sin + ry0 * cos;
+            const fx = -ax * knee, fy = g - ay * knee;
+            let alpha = f * (rx * fy - ry * fx) / I - wS * wS * sim.th - 2 * zS * wS * sim.om;
+            if (Math.abs(sim.th) > 0.9) alpha -= sim.om * 7;                                                // ângulo grande (desvirando): freia
+            if (Math.abs(sim.th) > 1.2 && Math.sign(sim.om) === Math.sign(sim.th)) alpha -= sim.om * 18;   // batente macio
+            sim.om += alpha * h;
+            sim.th += sim.om * h;
+          }
+          // geleca: puxão vertical estica, freada achata
+          sim.ev += (-ay * knee * 0.000009 * wJ * wJ - wJ * wJ * sim.e - 2 * zJ * wJ * sim.ev) * h;
+          sim.e += sim.ev * h;
+          sim.Lv += ((1.08 - sim.L) * wL * wL - 2 * zL * wL * sim.Lv) * h;
+          sim.L += sim.Lv * h;
+        }
+        sim.e = U.clamp(sim.e, -0.25, 0.3);
+        if (tilts) t.rot = sim.th * 57.29578;
+        gsap.set(img, { scaleX: sim.L * (1 - sim.e * 0.55), scaleY: sim.L * (1 + sim.e) });
+        if (moved) {
+          // posição já com a escala de onde ele vai ficar: o ponto agarrado fica no dedo
+          const p = sim.G;
+          let sc = G.room.depthScale(t.z);
+          let by = p.y - offL.y * sc;
+          for (let i = 0; i < 2; i++) { sc = G.room.depthScale(U.clamp(by + lift, geo.zMin, geo.zMax)); by = p.y - offL.y * sc; }
+          const bx = U.clamp(p.x - offL.x * sc, t.w * 0.5, G.room.W - t.w * 0.5);
+          by = Math.max(geo.top + t.hh, by);
+          const z = U.clamp(by + lift, geo.zMin, geo.zMax);
+          t.x = bx; t.z = z; t.h = Math.max(0, z - by);
+          t.lastMoved = now;
+        }
+        mark(t);
+      };
+      gsap.ticker.add(tick);
 
       const end = (cancelled) => {
+        gsap.ticker.remove(tick);
         t.dragging = false;
+        // volta a girar pelo meio (compensado: sem pulo) e a imagem assenta com geleca
+        if (tilts) setToyOrigin(t, 0.5, 0.5);
         mark(t);
+        gsap.fromTo(img, { scaleX: gsap.getProperty(img, 'scaleX'), scaleY: gsap.getProperty(img, 'scaleY') },
+          { scaleX: 1, scaleY: 1, duration: 0.7, ease: 'elastic.out(1, .32)', overwrite: 'auto' });
         if (t.stolen) return;
         if (!moved && !cancelled) {
           // toque simples
@@ -304,24 +417,33 @@
         const vh = vy < 0 ? -vy * 0.8 : 0;
         const vz = vy < 0 ? vy * 0.2 : vy * 0.7;
         throwToy(t, U.clamp(vx, -2400, 2400), U.clamp(vz, -1200, 1200), U.clamp(vh, 0, 1800));
+        // o balanço do arraste continua um pouquinho e volta com mola (roll/spin seguem a física)
+        if (tilts && !t.def.spin) {
+          const kickRot = t.rot + U.clamp(sim.om * 57.29578 * 0.12, -25, 25);
+          gsap.to(t, { keyframes: [{ rot: kickRot, duration: 0.12, ease: 'power1.out' }, { rot: 0, duration: 0.7, ease: 'elastic.out(1, .35)' }], onUpdate: () => mark(t) });
+        }
         if (Math.hypot(vx, vy) > 900) G.audio.play('whoosh', { intensity: 0.6 });
         G.bus.emit('toy:thrown', { toy: t, speed: Math.hypot(vx, vy) });
       };
 
+      const sample = (p, e) => {
+        samples.push({ x: p.x, y: p.y, t: (e && e.timeStamp) || U.now() });
+        if (samples.length > 32) samples.shift();
+      };
+
       return {
-        move(p) {
+        sample,
+        move(p, e) {
           if (t.stolen) return;
-          samples.push({ ...p, t: U.now() });
-          if (samples.length > 20) samples.shift();
+          sample(p, e);
+          sim.finger = p;
           if (!moved && U.dist(p.x, p.y, start.x, start.y) > 6) moved = true;
           if (!moved) return;
-          const ax = U.clamp(p.x - off.x, t.w * 0.5, G.room.W - t.w * 0.5);
-          const ay = Math.max(geo.top + t.hh, p.y - off.y - 8);
-          const z = U.clamp(ay + 8, geo.zMin, geo.zMax);
-          qx(ax); qz(z); qh(Math.max(0, z - ay));
-          t.lastMoved = U.now();
           G.bus.emit('toy:move', t);
-          if (t.def.plush) plushNear(t, ax, ay - t.hh / 2);
+          if (t.def.plush) {
+            const s = G.room.depthScale(t.z);
+            plushNear(t, p.x - offL.x * s, p.y - offL.y * s - t.hh / 2);
+          }
         },
         up() { end(false); },
         cancel() { end(true); }
@@ -541,6 +663,9 @@
     if (!t.dragging) return;
     t.stolen = true;
     t.dragging = false;
+    // largou da mão: volta a girar pelo meio e a imagem assenta
+    if (t.origin && (t.origin.x !== 0.5 || t.origin.y !== 0.5)) setToyOrigin(t, 0.5, 0.5);
+    gsap.to(t.wrap.firstChild, { scaleX: 1, scaleY: 1, duration: 0.6, ease: 'elastic.out(1, .35)', overwrite: 'auto' });
     G.audio.play('squeak', { pitch: 1.4 });
     G.petState.emote('excited', 1500);
     G.bubble.show('!!', { duration: 900 });

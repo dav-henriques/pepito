@@ -24,12 +24,25 @@
   const cfg = () => G.config.behavior;
 
   /** Executa uma ação assíncrona marcando o cérebro como ocupado */
+  let queued = null;
   async function run(fn) {
     if (busy) return false;
     busy = true;
     try { return await fn(); }
     catch (e) { console.warn('[behavior]', e); return false; }
-    finally { busy = false; }
+    finally {
+      busy = false;
+      if (queued) { const q = queued; queued = null; setTimeout(() => run(q), 0); }
+    }
+  }
+
+  /** Pedido do jogador (tocou na caminha…): se ele estiver no meio de outra
+      mania, larga o que está fazendo e atende logo em seguida */
+  function request(fn) {
+    if (!busy) return run(fn);
+    queued = fn;
+    if (phys().mode === 'walk') phys().stop();
+    return Promise.resolve(false);
   }
 
   /** Pode começar uma ação nova? */
@@ -158,7 +171,7 @@
       G.bus.emit('behavior:stare');
       await U.wait(U.rand(1800, 2600));
       if (!staring) return true;
-      G.speech.maybe('staring', 0.5);
+      G.express.maybe('staring', 0.5);
       await U.wait(U.rand(3000, 4800));
       if (!staring) return true;
       staring = false;
@@ -178,7 +191,7 @@
       ps().emote('sillyPose', U.rand(4200, 5600));
       G.bus.emit('behavior:sillyPose');
       if (U.chance(0.45)) { await U.wait(900); if (!still()) return false; G.fx.flash(0.75); G.anim.flash(); }
-      G.speech.maybe('sillyPose', 0.5);
+      G.express.maybe('sillyPose', 0.5);
       await U.wait(U.rand(3200, 4400));
       if (!still()) return false;
       phys().lean(0);
@@ -212,7 +225,7 @@
       phys().face(side);
       phys().hop(6);
       G.bubble.show('dots', { duration: 1100 });
-      G.speech.maybe('ignoreToy', 0.5);
+      G.express.maybe('ignoreToy', 0.5);
       G.bus.emit('behavior:ignoreToy', { toy: t.id });
       await U.wait(1500);
       if (still()) phys().setPose('stand');
@@ -226,9 +239,12 @@
       return G.reactions.plush(t, 'visit');
     },
 
-    /** fala uma das frases internas */
+    /** cantarola à toa (notinhas, brilhinho…) com um miadinho */
     async chatter() {
-      return G.speech.say('idle');
+      const ok = G.express.say('idle');
+      if (ok && U.chance(0.5)) G.audio.play('meow', { short: true, pitch: U.rand(1, 1.25) });
+      if (ok) phys().hop(8);
+      return ok;
     }
   };
 
@@ -265,10 +281,16 @@
       if (ps().physical) return false;
       phys().setPose('loaf');
       ps().setActivity('sleeping');
+      G.bubble.show('z', { duration: 1800 });
       sleepInfo = { since: Date.now(), nap: !!opts.nap, onBed };
       G.bus.emit('behavior:sleep', sleepInfo);
       return true;
     }
+  }
+
+  /** Tem sono de verdade? (senão, quando chamam para a caminha, é só uma soneca) */
+  function sleepyEnough() {
+    return G.needs.get('energy') < 70 || G.time.isNight();
   }
 
   function wakeUp(opts = {}) {
@@ -297,8 +319,9 @@
     const e = G.needs.get('energy');
     const age = Date.now() - sleepInfo.since;
     const night = G.time.isNight();
-    if (e >= 99) return wakeUp();
-    if (sleepInfo.nap && age > 22000) return wakeUp();
+    // soneca: no mínimo uns segundos de "z", mesmo que ele já esteja descansado
+    if (sleepInfo.nap) { if (age > 26000 || (e >= 99 && age > 14000)) wakeUp(); return; }
+    if (e >= 99 && age > 10000) return wakeUp();
     if (!night && e > 70 && age > 45000) return wakeUp();
     if (G.needs.get('hunger') < G.config.needs.thresholds.veryHungry && age > 30000 && G.food.hasFood()) return wakeUp();
   }
@@ -409,7 +432,8 @@
       G.bus.on('state:activity', ({ activity }) => { if (activity !== 'sleeping') sleepInfo = null; });
     },
 
-    sleepNow: (o) => run(() => sleepNow(o)),
+    sleepNow: (o) => request(() => sleepNow(o)),
+    sleepyEnough,
     wakeUp,
     /** tocou nele enquanto encarava: susto, "você piscou primeiro" */
     breakStare() {

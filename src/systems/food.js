@@ -14,6 +14,11 @@
   let treatLog = [];
 
   function foods() { return G.config.foods; }
+  /** Nome da comida no menu (nome ainda não escolhido "[...]" vira "favorita" fora do rascunho) */
+  function labelOf(f) {
+    if (U.isPlaceholder(f.label) && !U.showPlaceholders) return f.favorite ? 'favorita' : 'comida';
+    return f.label;
+  }
 
   function renderBowl(animated) {
     if (!bowl.food || bowl.amount <= 0.02) {
@@ -45,27 +50,23 @@
 
     const ids = Object.keys(foods());
     const n = ids.length;
-    const R = n >= 4 ? 106 : 92;
-    // leque acima do pote, levemente inclinado para o centro do quarto
-    const lean = U.clamp((G.room.W / 2 - ax) / G.room.W, -0.5, 0.5) * 0.9;
-    const spread = Math.min(2.1, 0.78 * (n - 1));
-    const pos = ids.map((id, i) => {
-      const a = -Math.PI / 2 + lean + (n === 1 ? 0 : (i / (n - 1) - 0.5) * spread);
-      return { x: Math.cos(a) * R, y: Math.sin(a) * R - 10 };
-    });
-    // empurra o leque inteiro para dentro da tela
-    const minX = Math.min(...pos.map((p) => ax + p.x)), maxX = Math.max(...pos.map((p) => ax + p.x));
+    // fileira de "porta-copos" logo acima do pote (cada um meio torto),
+    // centralizada no pote e empurrada para dentro da tela
+    const gap = U.clamp((G.room.W - 24) / n, 62, 80);
+    const pos = ids.map((id, i) => ({ x: (i - (n - 1) / 2) * gap, y: -88 + (i % 2 ? -10 : 4) }));
+    const minX = ax + pos[0].x, maxX = ax + pos[n - 1].x;
     const shift = minX < 40 ? 40 - minX : maxX > G.room.W - 40 ? G.room.W - 40 - maxX : 0;
     ids.forEach((id, i) => {
       const f = foods()[id];
       const bx = pos[i].x + shift, by = pos[i].y;
       const fimg = U.h('img', { alt: '', draggable: 'false' });
       G.media.img(fimg, 'food.' + f.asset);
-      const btn = U.h('button', { class: 'food-btn' + (f.favorite ? ' fav' : ''), 'aria-label': f.label }, [fimg, U.h('span', { text: f.label })]);
+      const label = labelOf(f);
+      const btn = U.h('button', { class: 'food-btn' + (f.favorite ? ' fav' : '') + (U.isPlaceholder(label) ? ' placeholder' : ''), 'aria-label': label }, [fimg, U.h('span', { text: label })]);
       btn.addEventListener('click', (e) => { e.stopPropagation(); serve(id, btn); });
       menu.appendChild(btn);
       gsap.fromTo(btn, { x: 0, y: 0, scale: 0, rotation: -40 },
-        { x: bx, y: by, scale: 1, rotation: 0, duration: 0.42, delay: i * 0.05, ease: 'back.out(1.9)' });
+        { x: bx, y: by, scale: 1, rotation: U.rand(-6, 6), duration: 0.42, delay: i * 0.05, ease: 'back.out(1.9)' });
     });
     G.audio.play('pop', { v: 0.7 });
     gsap.fromTo(bowlEl, { scaleY: 0.9, scaleX: 1.06 }, { scaleY: 1, scaleX: 1, duration: 0.5, ease: 'elastic.out(1, .4)', transformOrigin: '50% 100%' });
@@ -176,6 +177,9 @@
         bowl.amount = left;
         renderBowl(true);
         G.audio.play('munch');
+        // o pote balança a cada mordida (ele empurra com a cara)
+        gsap.fromTo(bowlEl, { scaleX: 1.03, scaleY: 0.96, x: U.rand(-1.5, 1.5) },
+          { scaleX: 1, scaleY: 1, x: 0, duration: 0.3, ease: 'power2.out', transformOrigin: '50% 100%', overwrite: 'auto' });
         const z = G.room.zones.bowl;
         G.fx.burst('crumb', z.cx + U.rand(-10, 10), z.y0 + 6, 2, { spread: 0.6, fall: 14 });
         if (elapsed >= total) return finish(true);

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   PROGRESSO — amizade (XP/nível), estatísticas e desbloqueios
+   PROGRESSO — amizade (XP/nível) e estatísticas
    ========================================================================== */
 (function (G) {
   'use strict';
@@ -54,8 +54,6 @@
       state.stats[stat] = (state.stats[stat] || 0) + n;
       G.save.soon(3000);
       return state.stats[stat];
-    },
-
-    isUnlocked(item) { return (item.level || 0) <= this.level(); }
+    }
   };
 })(window.Game = window.Game || {});

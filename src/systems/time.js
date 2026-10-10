@@ -1,7 +1,7 @@
 /* ==========================================================================
    CICLO DE TEMPO — manhã / tarde / noite
-   Não muda o visual (o fundo é branco): só o comportamento. À noite ele
-   fica mais sonolento, cochila mais e acorda menos.
+   Muda o comportamento (à noite ele fica mais sonolento, cochila mais e
+   acorda menos) e, de leve, a luz do papel do quarto (#room[data-phase]).
    Teste rápido: ?hora=22 na URL.
    ========================================================================== */
 (function (G) {

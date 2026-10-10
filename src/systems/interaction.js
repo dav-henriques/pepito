@@ -17,7 +17,19 @@
   let roomEl = null;
   let lastActivity = Date.now();
 
-  function local(e) { return G.room.toLocal(e.clientX, e.clientY); }
+  // posição do quarto na tela: medida no começo de cada gesto (e ao redimensionar),
+  // não a cada movimento do dedo — getBoundingClientRect em todo pointermove
+  // força o navegador a recalcular estilos dezenas de vezes por segundo
+  let roomRect = null;
+  function measureRoom() {
+    const r = roomEl.getBoundingClientRect();
+    roomRect = { left: r.left, top: r.top };
+    G.room.left = r.left; G.room.top = r.top;
+  }
+  function local(e) {
+    if (!roomRect) measureRoom();
+    return { x: e.clientX - roomRect.left, y: e.clientY - roomRect.top };
+  }
 
   /** O ponto está sobre o corpo do pet? (caixa encolhida, ignora as bordas transparentes) */
   function petUnder(pt) {
@@ -34,6 +46,7 @@
     const t = e.target;
     if (t.closest('.hud, .food-menu, .bath-tool, .sheet, .sheet-backdrop, .needs-panel, .vol-pop')) return;
 
+    measureRoom();
     const pt = local(e);
     lastActivity = Date.now();
     G.bus.emit('user:activity', { pt });
@@ -62,9 +75,13 @@
     if (!active || e.pointerId !== active.id) return;
     const g = active.g;
     if (!g.move) return;
-    const list = e.getCoalescedEvents ? e.getCoalescedEvents() : null;
-    if (list && list.length > 1) for (const ce of list) g.move(local(ce), ce);
-    else g.move(local(e), e);
+    // eventos agrupados (telas de 120 Hz, caneta): os intermediários só servem
+    // para medir a velocidade do arremesso; o gesto anda com o último
+    if (g.sample && e.getCoalescedEvents) {
+      const list = e.getCoalescedEvents();
+      for (let i = 0; i < list.length - 1; i++) g.sample(local(list[i]), list[i]);
+    }
+    g.move(local(e), e);
   }
 
   function onEnd(e, cancelled) {
@@ -96,7 +113,7 @@
       const holdTimer = setTimeout(() => {
         if (lifted) return;
         petting = true;
-        threshold = 30;   // durante o carinho, dá pra "alisar" sem levantar
+        threshold = 26;   // durante o carinho, dá pra "alisar" sem levantar
         G.bus.emit('pet:pettingStart');
       }, 480);
 
@@ -115,21 +132,31 @@
         }
       };
 
+      let prevT = U.now();
       return {
-        move(p) {
+        sample(p, e) { G.physics.sample(p, e && e.timeStamp); },
+        move(p, e) {
           if (!lifted) {
             const d = U.dist(p.x, p.y, start.x, start.y);
-            if (petting) { stroke += U.dist(p.x, p.y, prev.x, prev.y); prev = p; G.bus.emit('pet:stroke', { stroke }); }
-            if (d > threshold) {
+            const now = U.now();
+            const step = U.dist(p.x, p.y, prev.x, prev.y);
+            const speed = step / Math.max(0.008, (now - prevT) / 1000);
+            if (petting) { stroke += step; G.bus.emit('pet:stroke', { stroke }); }
+            prev = p; prevT = now;
+            // no carinho dá para "alisar" sem levantar… mas puxar para cima ou
+            // arrastar rápido levanta na hora (antes ficava preso até 30 px)
+            const pulling = petting && (start.y - p.y > 14 || (speed > 900 && d > 14));
+            if (d > threshold || pulling) {
               lifted = true;
               clearTimeout(holdTimer);
               if (petting) { petting = false; G.bus.emit('pet:pettingEnd', { stroke, interrupted: true }); }
               G.physics.lift();
               ps.setPhysical('beingDragged');
+              G.haptic(8);
               G.bus.emit('pet:lift');
             }
           }
-          G.physics.dragTo(p);
+          G.physics.dragTo(p, e && e.timeStamp);
         },
         up() { finish(false); },
         cancel() { finish(true); }
@@ -181,6 +208,7 @@
       G.bus.on('physics:settled', () => {
         if (G.petState.physical === 'airborne') G.petState.setPhysical(null);
       });
+      G.bus.on('room:resize', () => { roomRect = null; });
     },
 
     register(kind, handler) { handlers[kind] = handler; },

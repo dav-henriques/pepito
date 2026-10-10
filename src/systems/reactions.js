@@ -33,7 +33,6 @@
     gsap.fromTo('#room', { x: -4 }, { x: 0, duration: 0.45, ease: 'elastic.out(1, .3)' });
     const p = phys().anchorPoint('eyes');
     G.fx.spawn('impact', p.x, p.y, { size: 96 });
-    setTimeout(() => G.speech.maybe('startled', 0.55), 900);
     G.bus.emit('pet:startled');
   }
 
@@ -72,7 +71,6 @@
       phys().hop(10);
       phys().face(-phys().facing);
       G.needs.add({ happiness: -0.8 }, 'annoyed');
-      setTimeout(() => G.speech.maybe('annoyed', 0.6), 1500);
       return;
     }
     if (n >= 4) {
@@ -145,8 +143,19 @@
     phys().purr(false);
     G.audio.purr(false);
     if (!p.asleep && ps().emotion === 'happy') ps().emote('happy', 1500);
-    G.progress.count('pettingSeconds', Math.round((Date.now() - p.start) / 1000));
-    if (p.fallAsleep && !e.interrupted) setTimeout(() => G.behavior.sleepNow({ here: true }), 300);
+    const secs = (Date.now() - p.start) / 1000;
+    G.progress.count('pettingSeconds', Math.round(secs));
+    if (p.fallAsleep && !e.interrupted) { setTimeout(() => G.behavior.sleepNow({ here: true }), 300); return; }
+    // gostou do carinho: pulinho de agradecimento + coraçãozinho
+    if (!p.asleep && !e.interrupted && secs > 1.2) {
+      setTimeout(() => {
+        if (!phys().isIdle() || ps().physical) return;
+        phys().hop(U.rand(12, 18));
+        const h = phys().anchorPoint('top');
+        G.fx.spawn('heart', h.x + U.rand(-12, 12), h.y + 22, { size: 20 });
+        if (secs > 4 && Math.random() < 0.5) G.audio.play('meow', { short: true, pitch: 1.15 });
+      }, 120);
+    }
   }
 
   /* ---------------- pegar / soltar ---------------- */
@@ -164,7 +173,7 @@
       G.audio.play('meow', { short: true, pitch: 1.35 });
     }
     phys().setPose('stand');
-    G.audio.play('pop', { v: 0.6 });
+    G.audio.play('peel');            // som de adesivo descolando do papel
     G.progress.count('lifts');
   }
 
@@ -191,6 +200,7 @@
     if (speed < 110) return;
     const k = U.clamp(speed / 1300, 0.15, 1.3);
     G.audio.play(bounce > 1 ? 'boing' : 'land', { intensity: k, pitch: bounce > 1 ? 1.2 : 1 });
+    if (bounce === 1 && speed > 700) G.haptic(speed > 1250 ? 22 : 12);
     if (speed > 420 && bounce === 1) {
       const P = phys().P;
       const n = speed > 900 ? 4 : 2;
@@ -208,6 +218,7 @@
     if (speed < 220 || now - lastWallSound < 160) return;
     lastWallSound = now;
     G.audio.play('thud', { intensity: U.clamp(speed / 1000, 0.3, 1.3) });
+    if (speed > 400) G.haptic(speed > 800 ? 18 : 10);
     if (axis === 'x') {
       const wx = side < 0 ? 8 : G.room.W - 8;
       const wy = z - h - G.room.petH * 0.5;
@@ -222,6 +233,7 @@
 
   function onCeiling({ x }) {
     G.audio.play('thud', { intensity: 1 });
+    G.haptic(16);
     G.fx.burst('star', x, G.room.geo.top + 6, 4, { angle: Math.PI / 2 });
     G.bubble.show('stars', { duration: 1200 });
     gsap.fromTo('#room', { y: -3 }, { y: 0, duration: 0.35, ease: 'elastic.out(1, .3)' });
@@ -246,14 +258,9 @@
       // na caminha
       if (G.room.nearBed(x, z)) {
         G.bus.emit('pet:placed', { where: 'bed' });
-        if (G.needs.get('energy') < 55 || G.time.isNight()) { G.behavior.sleepNow({ onBed: true }); return; }
-        // se ajeita no meio da caminha e fica feliz
-        phys().jumpTo(Z.bed.cx, Z.bed.seatZ, { height: 12, kind: 'jump' }).then((ok) => {
-          if (!ok) return;
-          phys().setPose('loaf');
-          ps().emote('happy', 2200);
-          G.bubble.show(U.pick(['love', 'note']), { duration: 1200 });
-        });
+        // colocou na caminha = hora de dormir (descansado: só uma soneca)
+        G.bubble.show('moon', { duration: 900 });
+        G.behavior.sleepNow({ onBed: true, nap: !G.behavior.sleepyEnough() });
         return;
       }
 
@@ -339,7 +346,7 @@
       phys().setPose('stand');
       if (U.chance(0.55)) { ps().emote('happy', 1800); G.bubble.show('note', { duration: 1000 }); }
       else { ps().emote('grumpy', 1600); G.bubble.show('?!', { duration: 1000 }); }
-      setTimeout(() => G.speech.maybe('plushie', 0.6), 1100);
+      setTimeout(() => G.express.maybe('plushie', 0.6), 1100);
     },
     /** olha… e vira a cara com o nariz empinado */
     async ignore(t) {
@@ -350,7 +357,7 @@
       phys().setPose('tall');
       phys().hop(8);
       G.bubble.show('dots', { duration: 1200 });
-      setTimeout(() => G.speech.maybe('ignoreToy', 0.7), 900);
+      setTimeout(() => G.express.maybe('ignoreToy', 0.7), 900);
       await U.wait(1700);
       if (phys().isIdle()) phys().setPose('stand');
     },
@@ -368,7 +375,7 @@
       await U.wait(2600);
       phys().purr(false); G.audio.purr(false);
       if (phys().isIdle()) phys().setPose('stand');
-      setTimeout(() => G.speech.maybe('plushie', 0.6), 300);
+      setTimeout(() => G.express.maybe('plushie', 0.6), 300);
     },
     /** dá o bote e chuta longe */
     async attack(t) {

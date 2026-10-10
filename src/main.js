@@ -56,7 +56,7 @@
     G.bath.init();
     G.play.init();
     G.reactions.init();
-    G.speech.init();
+    G.express.init();
     G.behavior.init();
     G.objects.init();
     G.hud.init();
@@ -121,7 +121,7 @@
           G.bubble.show('!', { duration: 1200 });
           G.audio.play('meow');
           G.petState.emote('excited', 1600);
-          setTimeout(() => G.speech.say('hello'), 1500);
+          setTimeout(() => G.express.say('hello'), 1500);
         });
       }, 650);
       setTimeout(() => {
@@ -134,7 +134,7 @@
           G.petState.emote('excited', 1800);
           G.bubble.show('love', { duration: 1500 });
           G.audio.play('meow', { pitch: 1.1 });
-          setTimeout(() => G.speech.say('hello'), 2000);
+          setTimeout(() => G.express.say('hello'), 2000);
         } else if (Math.random() < 0.5) {
           G.bubble.show(U.pick(['!', 'note']), { duration: 1000 });
         }
