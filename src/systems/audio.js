@@ -1,16 +1,23 @@
 /* ==========================================================================
-   SOM — tudo sintetizado com WebAudio (zero arquivos de áudio).
-   G.audio.play('boing', { intensity: .8 })
-   Músicas do rádio: G.audio.music.start('lofi' | 'chip')
-   Para usar arquivos reais no futuro, troque a implementação de play().
+   SOM
+   --------------------------------------------------------------------------
+   • Efeitos sintetizados com WebAudio (funcionam sem nenhum arquivo).
+     G.audio.play('boing', { intensity: .8 })
+   • Arquivos opcionais substituem os sintetizados (assets.js → sfx).
+     Ex.: coloque assets/sounds/meow.mp3 e todos os miados viram o seu.
+   • Volume geral e mute (salvos no save). Nada toca antes de um toque.
    ========================================================================== */
 (function (G) {
   'use strict';
   const U = G.util;
 
-  let ctx = null, master = null, sfxBus = null, musicBus = null, noiseBuf = null;
+  let ctx = null, master = null, sfxBus = null, noiseBuf = null;
   let enabled = true;
   let purrNode = null;
+  let userVol = 1;          // 0–1 (controle do jogador)
+
+  const A = () => G.config.audio;
+  const masterLevel = () => (enabled ? A().volume * userVol : 0);
 
   function ensure() {
     if (!enabled) return null;
@@ -19,10 +26,9 @@
       if (!AC) return null;
       ctx = new AC();
       master = ctx.createGain();
-      master.gain.value = G.config.audio.volume;
+      master.gain.value = masterLevel();
       master.connect(ctx.destination);
       sfxBus = ctx.createGain(); sfxBus.connect(master);
-      musicBus = ctx.createGain(); musicBus.gain.value = G.config.audio.musicVolume; musicBus.connect(master);
       noiseBuf = ctx.createBuffer(1, ctx.sampleRate, ctx.sampleRate);
       const d = noiseBuf.getChannelData(0);
       for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
@@ -57,7 +63,7 @@
       f.Q.value = opts.filter.Q || 1;
       g.connect(f); out = f;
     }
-    o.connect(g); out.connect(opts.bus || sfxBus);
+    o.connect(g); out.connect(sfxBus);
     o.start(t); o.stop(t + dur + 0.05);
   }
 
@@ -69,7 +75,7 @@
     f.frequency.setValueAtTime(f0, t);
     f.frequency.exponentialRampToValueAtTime(f1, t + dur);
     const g = c.createGain(); env(g, t, opts.attack || 0.005, peak, dur);
-    src.connect(f); f.connect(g); g.connect(opts.bus || sfxBus);
+    src.connect(f); f.connect(g); g.connect(sfxBus);
     src.start(t, Math.random() * 0.5); src.stop(t + dur + 0.05);
   }
 
@@ -94,9 +100,9 @@
     hiss: () => noise(0.32, 'highpass', 3200, 5200, 0.12, { attack: 0.03 }),
     yawn: () => tone(430, 230, 0.75, 'sine', 0.13, { mid: 520, midAt: 0.25, attack: 0.12, filter: { type: 'lowpass', freq: 900 } }),
     snore: () => noise(0.9, 'lowpass', 260, 420, 0.07, { attack: 0.35 }),
-    tick: () => tone(2400, 2200, 0.02, 'square', 0.03),
-    radio: () => noise(0.18, 'bandpass', 1500, 3000, 0.08, { Q: 0.6 }),
-    zap: () => tone(1800, 600, 0.12, 'sawtooth', 0.04, { filter: { type: 'lowpass', freq: 3000 } }),
+    squish: (o) => { tone(260 * (o.pitch || 1), 140, 0.16, 'sine', 0.22, { mid: 420, midAt: 0.25 }); noise(0.1, 'lowpass', 900, 300, 0.06); },
+    shutter: () => { noise(0.03, 'highpass', 3000, 5000, 0.18); noise(0.05, 'bandpass', 1800, 1200, 0.14, { delay: 0.07, Q: 2 }); tone(5200, 4800, 0.04, 'square', 0.02, { delay: 0.02 }); },
+    tada: () => { [523.25, 659.25, 783.99, 1046.5].forEach((f, i) => tone(f, f, 0.32 + i * 0.05, 'triangle', 0.1, { delay: i * 0.07 })); },
     meow(o) {
       const c = ensure(); if (!c) return;
       const p = (o.pitch || 1) * U.rand(0.94, 1.08);
@@ -116,111 +122,128 @@
     }
   };
 
-  /* ---------- música do rádio (gerativa) ---------- */
-  const STATIONS = {
-    lofi: {
-      bpm: 76, swing: 0.12,
-      chords: [[53, 57, 60, 64], [52, 55, 59, 62], [50, 53, 57, 60], [48, 52, 55, 59]],
-      scale: [60, 62, 64, 67, 69, 72, 74, 76],
-      pad: 'triangle', lead: 'sine', drums: true
-    },
-    chip: {
-      bpm: 128, swing: 0,
-      chords: [[57, 60, 64, 67], [53, 57, 60, 64], [48, 52, 55, 60], [55, 59, 62, 67]],
-      scale: [69, 72, 74, 76, 79, 81, 84],
-      pad: 'square', lead: 'square', drums: true, arp: true
+  /* ======================================================================
+     ARQUIVOS DE ÁUDIO (opcionais)
+     ====================================================================== */
+  const probeCache = new Map();     // src → Promise<boolean>
+  const sfxFiles = {};              // nome → [src que existem]
+  const buffers = new Map();        // src → 'loading' | AudioBuffer | false
+  const voiceBusy = {};             // nome → até quando está tocando
+  const lastAt = {};
+  let filesPrepared = false;
+
+  /** O arquivo existe? (HEAD no servidor; em file:// testa com <audio>) */
+  function probe(src) {
+    if (!src) return Promise.resolve(false);
+    if (!probeCache.has(src)) {
+      probeCache.set(src, (async () => {
+        if (G.media.isHttp) {
+          try {
+            const r = await fetch(src, { method: 'HEAD', cache: 'no-cache' });
+            if (r.ok) return true;
+            if (r.status !== 405 && r.status !== 501) return false;
+          } catch (e) { /* tenta com <audio> */ }
+        }
+        return new Promise((res) => {
+          const a = new Audio();
+          let done = false;
+          const fin = (v) => { if (done) return; done = true; res(v); };
+          a.preload = 'metadata';
+          a.addEventListener('loadedmetadata', () => fin(true), { once: true });
+          a.addEventListener('error', () => fin(false), { once: true });
+          setTimeout(() => fin(false), 6000);
+          a.src = src;
+        });
+      })());
     }
-  };
-  const mtof = (m) => 440 * Math.pow(2, (m - 69) / 12);
+    return probeCache.get(src);
+  }
 
-  const music = {
-    station: null, timer: 0, step: 0, nextTime: 0,
+  function loadBuffer(src) {
+    if (buffers.has(src) || !ctx) return;
+    buffers.set(src, 'loading');
+    fetch(src)
+      .then((r) => { if (!r.ok) throw new Error(r.status); return r.arrayBuffer(); })
+      .then((ab) => new Promise((res, rej) => ctx.decodeAudioData(ab, res, rej)))
+      .then((b) => buffers.set(src, b))
+      .catch(() => buffers.set(src, false));
+  }
 
-    start(name) {
-      const c = ensure(); if (!c) { this.station = name; return; }
-      this.stop(true);
-      this.station = name;
-      this.step = 0;
-      this.nextTime = c.currentTime + 0.1;
-      musicBus.gain.cancelScheduledValues(c.currentTime);
-      musicBus.gain.setValueAtTime(0.0001, c.currentTime);
-      musicBus.gain.exponentialRampToValueAtTime(G.config.audio.musicVolume, c.currentTime + 0.6);
-      this.timer = setInterval(() => this.schedule(), 30);
-    },
-
-    stop(instant) {
-      clearInterval(this.timer); this.timer = 0;
-      this.station = null;
-      if (ctx && musicBus && !instant) {
-        musicBus.gain.cancelScheduledValues(ctx.currentTime);
-        musicBus.gain.setValueAtTime(musicBus.gain.value, ctx.currentTime);
-        musicBus.gain.linearRampToValueAtTime(0, ctx.currentTime + 0.25);
-      }
-    },
-
-    schedule() {
-      if (!ctx || !this.station) return;
-      const S = STATIONS[this.station];
-      const sixteenth = 60 / S.bpm / 4;
-      while (this.nextTime < ctx.currentTime + 0.15) {
-        const st = this.step % 64;
-        const swingOffset = (st % 2 === 1) ? sixteenth * S.swing : 0;
-        this.playStep(S, st, this.nextTime + swingOffset, sixteenth);
-        this.nextTime += sixteenth;
-        this.step++;
-      }
-    },
-
-    playStep(S, st, t, sx) {
-      const bar = Math.floor(st / 16), beatPos = st % 16;
-      const chord = S.chords[bar % S.chords.length];
-      const B = musicBus;
-      const delay = Math.max(0, t - ctx.currentTime);
-      if (beatPos % 4 === 0) {
-        const beat = beatPos / 4;
-        setTimeout(() => G.bus.emit('music:beat', { beat, station: this.station }), delay * 1000);
-      }
-      if (beatPos === 0) {
-        chord.forEach((m) => tone(mtof(m), mtof(m), sx * 15, S.pad, S.arp ? 0.025 : 0.045, { delay, attack: 0.08, filter: { type: 'lowpass', freq: S.arp ? 1800 : 900 }, bus: B }));
-      }
-      if (beatPos === 0 || beatPos === 8 || (S.arp && beatPos % 4 === 0)) {
-        tone(mtof(chord[0] - 12), mtof(chord[0] - 12), sx * 3.5, 'sine', 0.16, { delay, attack: 0.01, bus: B });
-      }
-      if (S.arp && beatPos % 2 === 0) {
-        const m = chord[(beatPos / 2) % chord.length] + 12;
-        tone(mtof(m), mtof(m), sx * 1.5, 'square', 0.025, { delay, filter: { type: 'lowpass', freq: 2400 }, bus: B });
-      }
-      if (S.drums) {
-        if (beatPos === 0 || beatPos === 10) tone(120, 40, 0.18, 'sine', 0.28, { delay, bus: B });
-        if (beatPos === 4 || beatPos === 12) noise(0.12, 'bandpass', 1900, 1200, 0.07, { delay, Q: 0.8, bus: B });
-        if (beatPos % 2 === 0) noise(0.03, 'highpass', 7500, 9000, 0.025, { delay, bus: B });
-      }
-      if (!S.arp && (beatPos === 6 || beatPos === 14 || beatPos === 3) && Math.random() < 0.55) {
-        const m = U.pick(S.scale);
-        tone(mtof(m), mtof(m), sx * 3, S.lead, 0.05, { delay, attack: 0.02, filter: { type: 'lowpass', freq: 2200 }, bus: B });
+  /** Na primeira interação: descobre quais arquivos existem e pré-carrega */
+  async function prepareFiles() {
+    if (filesPrepared) return;
+    filesPrepared = true;
+    const S = G.assets.sfx || {};
+    for (const name in S) {
+      const ok = [];
+      for (const src of G.assetList(S[name])) if (await probe(src)) ok.push(src);
+      if (ok.length) {
+        sfxFiles[name] = ok;
+        if (G.media.isHttp && ctx) ok.forEach(loadBuffer);
       }
     }
-  };
+  }
+
+  /** Toca a versão em arquivo de um efeito. false = não tem arquivo (usa o sintetizado) */
+  function playFile(name, o) {
+    const list = sfxFiles[name];
+    if (!list) return false;
+    const now = U.now();
+    if (voiceBusy[name] && now < voiceBusy[name]) return true;      // não empilha o mesmo som
+    const src = U.pick(list);
+    const rate = U.clamp((o.pitch || 1) * (o.short ? 1.1 : 1), 0.5, 2);
+    const vol = U.clamp(o.v ?? o.intensity ?? 1, 0.05, 1.4);
+    if (G.media.isHttp && ctx) {
+      const buf = buffers.get(src);
+      if (!buf || buf === 'loading') { loadBuffer(src); return false; }   // ainda carregando → sintetizado
+      const s = ctx.createBufferSource();
+      s.buffer = buf;
+      s.playbackRate.value = rate;
+      const g = ctx.createGain();
+      g.gain.value = vol;
+      s.connect(g); g.connect(sfxBus);
+      s.start();
+      voiceBusy[name] = now + (buf.duration / rate) * 850;
+      return true;
+    }
+    const a = new Audio(src);
+    a.volume = U.clamp(vol * masterLevel(), 0, 1);
+    a.preservesPitch = false; a.mozPreservesPitch = false; a.webkitPreservesPitch = false;
+    a.playbackRate = rate;
+    a.play().catch(() => {});
+    voiceBusy[name] = now + 500;
+    return true;
+  }
 
   G.audio = {
     init() {
-      const settings = { sound: G.config.audio.enabledByDefault };
+      const settings = { sound: G.config.audio.enabledByDefault, volume: 1 };
       G.save.register('settings', {
-        get: () => ({ sound: enabled }),
-        set: (d) => { if (d && typeof d.sound === 'boolean') settings.sound = d.sound; }
+        get: () => ({ sound: enabled, volume: userVol }),
+        set: (d) => {
+          if (!d) return;
+          if (typeof d.sound === 'boolean') settings.sound = d.sound;
+          if (typeof d.volume === 'number') settings.volume = U.clamp(d.volume, 0, 1);
+        }
       });
       enabled = settings.sound;
+      userVol = settings.volume;
       // Navegadores só liberam áudio após um gesto do usuário
-      const unlock = () => { if (enabled) ensure(); };
+      const unlock = () => { if (enabled) ensure(); prepareFiles(); };
       window.addEventListener('pointerdown', unlock, { passive: true });
       window.addEventListener('keydown', unlock);
     },
 
     play(name, opts = {}) {
       if (!enabled) return;
-      const fn = SFX[name];
-      if (!fn) return;
-      try { if (ensure()) fn(opts); } catch (e) { /* áudio nunca deve quebrar o jogo */ }
+      const now = U.now();
+      if (lastAt[name] && now - lastAt[name] < 45) return;   // evita rajadas do mesmo som
+      lastAt[name] = now;
+      try {
+        if (ensure() && playFile(name, opts)) return;
+        const fn = SFX[name];
+        if (fn && ctx) fn(opts);
+      } catch (e) { /* áudio nunca deve quebrar o jogo */ }
     },
 
     purr(on) {
@@ -250,19 +273,25 @@
 
     setEnabled(v) {
       enabled = !!v;
-      if (!enabled) {
-        this.purr(false);
-        if (ctx) master.gain.value = 0;
-      } else {
-        ensure();
-        if (master) master.gain.value = G.config.audio.volume;
-        if (music.station) music.start(music.station);
-      }
+      if (!enabled) this.purr(false);
+      else ensure();
+      if (master) master.gain.value = masterLevel();
       G.bus.emit('audio:toggle', enabled);
       G.save.soon();
     },
 
-    get enabled() { return enabled; },
-    music
+    /** Volume geral (0–1) */
+    setVolume(v) {
+      userVol = U.clamp(+v || 0, 0, 1);
+      if (master) master.gain.value = masterLevel();
+      G.bus.emit('audio:volume', this.levels);
+      G.save.soon();
+    },
+    get levels() { return { volume: userVol }; },
+
+    /** Existe um arquivo nesse caminho? */
+    probe,
+
+    get enabled() { return enabled; }
   };
 })(window.Game = window.Game || {});

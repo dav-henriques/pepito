@@ -1,36 +1,24 @@
 /* ==========================================================================
-   PERSONALIZAÇÃO (folha inferior, GSAP)
-   Nome, acessório, parede, tapete. Alguns itens desbloqueiam com a amizade.
-   Opções novas: petConfig.customization (+ assets.js).
+   CADERNINHO (folha inferior, GSAP)
+   Nome, acessório, volume e estatísticas. Acessórios desbloqueiam com a
+   amizade. Opções novas: petConfig.customization (+ assets.js).
    ========================================================================== */
 (function (G) {
   'use strict';
   const U = G.util;
 
-  const custom = { name: null, accessory: 'none', wall: 'sage', rug: 'sun' };
+  const custom = { name: null, accessory: 'none' };
   let sheet = null, backdrop = null;
   let resetArmed = 0;
 
   function C() { return G.config.customization; }
 
   /* ---------------- aplicar ---------------- */
-  function applyWall(id) {
-    const w = C().walls.find((x) => x.id === id) || C().walls[0];
-    const s = document.getElementById('room').style;
-    s.setProperty('--wall-base', w.base);
-    s.setProperty('--wall-stripe', w.stripe);
-  }
-  function applyRug(id) {
-    const r = C().rugs.find((x) => x.id === id) || C().rugs[0];
-    document.getElementById('rug-img').src = G.asset('environment.' + r.asset);
-  }
   function applyName(name) {
     if (name) G.config.pet.name = name;
     G.hud.renderName();
   }
   function applyAll() {
-    applyWall(custom.wall);
-    applyRug(custom.rug);
     applyName(custom.name);
     G.anim.setAccessory(custom.accessory);
   }
@@ -49,8 +37,6 @@
         return;
       }
       custom[kind] = item.id;
-      if (kind === 'wall') applyWall(item.id);
-      if (kind === 'rug') applyRug(item.id);
       if (kind === 'accessory') {
         G.anim.setAccessory(item.id);
         if (item.id !== 'none') { G.petState.emote('happy', 1600); G.physics.hop(14); }
@@ -71,6 +57,7 @@
     const head = U.h('div', { class: 'sheet-head' }, [U.h('div', { class: 'grab' })]);
     el.appendChild(head);
 
+    el.appendChild(U.h('p', { class: 'kicker', text: 'caderninho do' }));
     el.appendChild(U.h('h2', { text: G.config.pet.name }));
     el.appendChild(U.h('p', { class: 'sub', text: `amizade nível ${lv}` + (lv < p.maxLevel() ? ` · ${Math.round(p.levelProgress() * 100)}% para o próximo` : ' · máximo!') }));
     const xp = U.h('div', { class: 'xpbar' }, [U.h('b')]);
@@ -103,38 +90,25 @@
     }
     el.appendChild(acc);
 
-    // parede
-    el.appendChild(U.h('h3', { text: 'parede' }));
-    const walls = U.h('div', { class: 'options' });
-    for (const w of C().walls) {
-      const sw = U.h('i', { class: 'sw' });
-      sw.style.background = `linear-gradient(90deg, ${w.base} 50%, ${w.stripe} 50%)`;
-      walls.appendChild(optionButton(w, 'wall', custom.wall === w.id, sw));
-    }
-    el.appendChild(walls);
+    // som
+    el.appendChild(U.h('h3', { text: 'som' }));
+    const vol = U.h('input', { type: 'range', min: '0', max: '100', step: '1', value: String(Math.round(G.audio.levels.volume * 100)), 'aria-label': 'Volume' });
+    vol.addEventListener('input', () => G.audio.setVolume(vol.value / 100));
+    vol.addEventListener('change', () => G.audio.play('pop', { v: 0.5 }));
+    const sound = U.h('div', { class: 'sound-box' }, [U.h('label', { class: 'vol-row' }, [U.h('span', { text: 'volume' }), vol])]);
+    const muteBtn = U.h('button', { class: 'btn ghost small', text: G.audio.enabled ? 'silenciar' : 'ligar o som' });
+    muteBtn.addEventListener('click', () => {
+      G.audio.setEnabled(!G.audio.enabled);
+      G.hud.syncSound();
+      muteBtn.textContent = G.audio.enabled ? 'silenciar' : 'ligar o som';
+    });
+    sound.appendChild(muteBtn);
+    el.appendChild(sound);
 
-    // tapete
-    el.appendChild(U.h('h3', { text: 'tapete' }));
-    const rugs = U.h('div', { class: 'options' });
-    for (const r of C().rugs) rugs.appendChild(optionButton(r, 'rug', custom.rug === r.id, U.h('img', { src: G.asset('environment.' + r.asset), alt: '' })));
-    el.appendChild(rugs);
-
-    // segredos + estatísticas
-    const eggs = G.eggs.list();
-    const nf = eggs.filter((e) => e.found).length;
-    el.appendChild(U.h('h3', { text: `segredos · ${nf}/${eggs.length}` }));
-    const eg = U.h('div', { class: 'options' });
-    for (const e of eggs) {
-      if (!e.found) continue;
-      const chip = U.h('span', { class: 'opt', text: e.title });
-      chip.style.height = '36px';
-      eg.appendChild(chip);
-    }
-    if (!nf) eg.appendChild(U.h('p', { class: 'sub', text: 'nenhum ainda… será que tem algum?' }));
-    el.appendChild(eg);
-
+    // estatísticas
     const st = p.stats;
-    el.appendChild(U.h('h3', { text: 'vocês dois' }));
+    const who = (G.personal && G.personal.playerName) || '';
+    el.appendChild(U.h('h3', { text: who ? `${who} & ${G.config.pet.name}` : 'vocês dois' }));
     const stats = U.h('div', { class: 'stats' });
     const stat = (n, label) => U.h('div', { class: 'stat' }, [U.h('b', { text: String(n || 0) }), U.h('span', { text: label })]);
     stats.append(
@@ -157,6 +131,8 @@
     });
     footer.append(reset, close);
     el.appendChild(footer);
+    const by = (G.personal && G.personal.madeBy) || '';
+    if (by) el.appendChild(U.h('p', { class: 'signature', text: `feito à mão por ${by}` }));
 
     // arrastar para baixo para fechar
     let startY = null, dy = 0;
@@ -205,7 +181,11 @@
     init() {
       G.save.register('custom', {
         get: () => ({ ...custom }),
-        set: (d) => { if (d) Object.assign(custom, d); }
+        set: (d) => {
+          if (!d) return;
+          if (typeof d.name === 'string') custom.name = d.name;
+          if (typeof d.accessory === 'string') custom.accessory = d.accessory;
+        }
       });
       applyAll();
     },

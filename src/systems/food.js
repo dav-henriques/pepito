@@ -45,7 +45,7 @@
 
     const ids = Object.keys(foods());
     const n = ids.length;
-    const R = 92;
+    const R = n >= 4 ? 106 : 92;
     // leque acima do pote, levemente inclinado para o centro do quarto
     const lean = U.clamp((G.room.W / 2 - ax) / G.room.W, -0.5, 0.5) * 0.9;
     const spread = Math.min(2.1, 0.78 * (n - 1));
@@ -59,10 +59,9 @@
     ids.forEach((id, i) => {
       const f = foods()[id];
       const bx = pos[i].x + shift, by = pos[i].y;
-      const btn = U.h('button', { class: 'food-btn', 'aria-label': f.label }, [
-        U.h('img', { src: G.asset('food.' + f.asset), alt: '', draggable: 'false' }),
-        U.h('span', { text: f.label })
-      ]);
+      const fimg = U.h('img', { alt: '', draggable: 'false' });
+      G.media.img(fimg, 'food.' + f.asset);
+      const btn = U.h('button', { class: 'food-btn' + (f.favorite ? ' fav' : ''), 'aria-label': f.label }, [fimg, U.h('span', { text: f.label })]);
       btn.addEventListener('click', (e) => { e.stopPropagation(); serve(id, btn); });
       menu.appendChild(btn);
       gsap.fromTo(btn, { x: 0, y: 0, scale: 0, rotation: -40 },
@@ -194,9 +193,9 @@
         G.progress.addXp(Math.round(f.xp * frac), 'eat');
         G.progress.count('meals');
         if (completed) {
-          ps.emote(id === 'special' ? 'excited' : 'happy', 2600);
+          ps.emote(id === 'special' || f.favorite ? 'excited' : 'happy', 2600);
           const p = G.physics.anchorPoint('top');
-          if (id === 'special') { G.fx.burst('sparkle', p.x, p.y + 20, 7); G.audio.play('sparkle'); }
+          if (id === 'special' || f.favorite) { G.fx.burst('sparkle', p.x, p.y + 20, 7); G.audio.play('sparkle'); }
           G.physics.hop(18);
           G.audio.play('meow', { short: true, pitch: 1.1 });
           G.bus.emit('food:eaten', { food: id });

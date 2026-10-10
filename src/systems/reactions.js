@@ -1,7 +1,9 @@
 /* ==========================================================================
    REAÇÕES — a personalidade do pet às ações do usuário
    Tocar, cutucar várias vezes, carinho, pegar, chacoalhar, arremessar,
-   bater na parede, ser colocado em lugares específicos…
+   bater na parede, ser colocado em lugares específicos, pelúcia…
+   Reação nova à pelúcia: adicione uma função em PLUSH e um peso em
+   personal.js → plushieReactions.
    ========================================================================== */
 (function (G) {
   'use strict';
@@ -12,9 +14,28 @@
   let petting = null;
   let roomTaps = [];
   let lastWallSound = 0;
+  let lastStartle = 0;
+  let plushBusy = false;
+  let lastPlush = 0;
 
   const ps = () => G.petState;
   const phys = () => G.physics;
+
+  /* ---------------- susto exagerado ---------------- */
+  function startle() {
+    lastStartle = Date.now();
+    ps().emote('startled', 1400);
+    G.anim.flash();
+    phys().launch(U.rand(-90, 90), 0, Math.sqrt(2 * G.config.physics.gravity * 78), { kind: 'startle' });
+    G.bubble.show('!!', { duration: 1000 });
+    G.audio.play('meow', { pitch: 1.5, short: true });
+    G.audio.play('boing', { intensity: 1, pitch: 1.35 });
+    gsap.fromTo('#room', { x: -4 }, { x: 0, duration: 0.45, ease: 'elastic.out(1, .3)' });
+    const p = phys().anchorPoint('eyes');
+    G.fx.spawn('impact', p.x, p.y, { size: 96 });
+    setTimeout(() => G.speech.maybe('startled', 0.55), 900);
+    G.bus.emit('pet:startled');
+  }
 
   /* ---------------- tocar ---------------- */
   function onTap() {
@@ -22,10 +43,19 @@
     if (ps().activity === 'sleeping') return pokeSleeping(now);
     if (ps().activity === 'bathing') return;
 
+    // estava encarando você → levou um susto ("você piscou primeiro")
+    if (G.behavior.staring) { G.behavior.breakStare(); return; }
+
     taps = taps.filter((t) => now - t < 4200);
     taps.push(now);
     const n = taps.length;
     G.progress.count('taps');
+
+    const B = G.config.behavior;
+    if (n === 1 && !ps().activity && phys().isIdle() && now - lastStartle > (B.startleCooldown || 45000) && U.chance(B.startleChance ?? 0.08)) {
+      startle();
+      return;
+    }
 
     if (ps().activity === 'eating') {
       phys().wobble(U.rand(-6, 6));
@@ -42,6 +72,7 @@
       phys().hop(10);
       phys().face(-phys().facing);
       G.needs.add({ happiness: -0.8 }, 'annoyed');
+      setTimeout(() => G.speech.maybe('annoyed', 0.6), 1500);
       return;
     }
     if (n >= 4) {
@@ -164,6 +195,11 @@
       const P = phys().P;
       const n = speed > 900 ? 4 : 2;
       for (let i = 0; i < n; i++) G.fx.spawn('dust', P.x + (i % 2 ? 1 : -1) * G.room.petW * 0.25, P.z - 4, { dir: i % 2 ? 1 : -1 });
+      // pancada forte: estrela de HQ + tremidinha do quarto
+      if (speed > 1250 && kind !== 'startle') {
+        G.fx.spawn('impact', P.x, P.z - G.room.petH * 0.18, { size: U.clamp(speed / 18, 70, 120) });
+        gsap.fromTo('#room', { y: 3 }, { y: 0, duration: 0.35, ease: 'elastic.out(1, .3)' });
+      }
     }
   }
 
@@ -231,27 +267,20 @@
         return;
       }
 
+      // perto da pelúcia
+      const plush = G.play.toys.plush;
+      if (plush && !plush.dragging && Math.hypot(x - plush.x, z - plush.z) < G.room.petW * 0.75) {
+        plushReaction(plush, 'placed');
+        return;
+      }
+
       // perto de um brinquedo
-      const nt = G.play.nearestToy(x, z);
+      const nt = G.play.nearestToy(x, z, (t) => t.def.chase !== false);
       if (nt && nt.dist < G.room.petW * 0.7) {
         phys().faceTo(nt.toy.x);
         G.bubble.show(U.pick(['?', 'ball']), { duration: 1100 });
         if (G.petState.can('play') && Math.random() < 0.55) setTimeout(() => G.play.playAlone(), 700);
         G.bus.emit('pet:placed', { where: 'toy' });
-        return;
-      }
-
-      // perto do rádio tocando
-      if (G.objects.radioOn && Math.abs(x - Z.radio.cx) < G.room.W * 0.28 && z < G.room.geo.zMin + 90) {
-        G.behavior.startDancing();
-        G.bus.emit('pet:placed', { where: 'radio' });
-        return;
-      }
-
-      // embaixo da janela
-      if (x > Z.window.x0 && x < Z.window.x1 && z < G.room.geo.zMin + 60) {
-        G.behavior.lookAtWindow();
-        G.bus.emit('pet:placed', { where: 'window' });
         return;
       }
 
@@ -293,7 +322,99 @@
     }, 350);
   }
 
+  /* ---------------- pelúcia ---------------- */
+  const PLUSH = {
+    /** cheira desconfiado… e decide se gostou */
+    async sniff(t) {
+      phys().faceTo(t.x);
+      if (!t.dragging && Math.abs(t.x - phys().P.x) > G.room.petW * 0.55) {
+        const side = Math.sign(phys().P.x - t.x) || 1;
+        if (!(await phys().walkTo(t.x + side * G.room.petW * 0.42, t.z))) return;
+        phys().faceTo(t.x);
+      }
+      phys().setPose('crouch');
+      ps().emote('confused', 2400);
+      G.bubble.show('?', { duration: 900 });
+      for (let i = 0; i < 3; i++) { phys().wobble((i % 2 ? 1 : -1) * U.rand(2, 4)); await U.wait(280); }
+      phys().setPose('stand');
+      if (U.chance(0.55)) { ps().emote('happy', 1800); G.bubble.show('note', { duration: 1000 }); }
+      else { ps().emote('grumpy', 1600); G.bubble.show('?!', { duration: 1000 }); }
+      setTimeout(() => G.speech.maybe('plushie', 0.6), 1100);
+    },
+    /** olha… e vira a cara com o nariz empinado */
+    async ignore(t) {
+      phys().faceTo(t.x);
+      ps().emote('staring', 1300);
+      await U.wait(1000);
+      phys().face(-(Math.sign(t.x - phys().P.x) || 1));
+      phys().setPose('tall');
+      phys().hop(8);
+      G.bubble.show('dots', { duration: 1200 });
+      setTimeout(() => G.speech.maybe('ignoreToy', 0.7), 900);
+      await U.wait(1700);
+      if (phys().isIdle()) phys().setPose('stand');
+    },
+    /** abraça e ronrona */
+    async hug(t) {
+      const side = Math.sign(phys().P.x - t.x) || 1;
+      if (!(await phys().walkTo(t.x + side * G.room.petW * 0.32, t.z))) return;
+      phys().faceTo(t.x);
+      await phys().jumpTo(t.x + side * G.room.petW * 0.14, t.z + 2, { height: 16, kind: 'jump' });
+      phys().setPose('loaf');
+      ps().emote('happy', 3400);
+      phys().purr(true); G.audio.purr(true);
+      const p = phys().anchorPoint('top');
+      G.fx.burst('sparkle', p.x, p.y + 24, 5);
+      await U.wait(2600);
+      phys().purr(false); G.audio.purr(false);
+      if (phys().isIdle()) phys().setPose('stand');
+      setTimeout(() => G.speech.maybe('plushie', 0.6), 300);
+    },
+    /** dá o bote e chuta longe */
+    async attack(t) {
+      phys().faceTo(t.x);
+      phys().setPose('crouch');
+      G.bubble.show('!', { duration: 600 });
+      await U.wait(340);
+      phys().setPose('stand');
+      ps().emote('excited', 1700);
+      if (t.dragging) {
+        await phys().hop(34);
+        G.play.steal(t);
+      } else {
+        const side = Math.sign(t.x - phys().P.x) || 1;
+        await phys().jumpTo(t.x - side * G.room.petW * 0.16, t.z, { height: 30, kind: 'pounce' });
+        G.play.kick(t, side, 1.1);
+      }
+      G.bubble.show('!!', { duration: 900 });
+    }
+  };
+
+  async function plushReaction(t, how) {
+    const now = Date.now();
+    if (plushBusy || now - lastPlush < 5000) return false;
+    const a = ps().activity;
+    if (a === 'sleeping' || a === 'bathing' || a === 'eating' || ps().physical || G.bath.active) return false;
+    if (G.play.session) G.play.endSession('interrupted');
+    plushBusy = true;
+    lastPlush = now;
+    try {
+      const w = { ...((G.personal && G.personal.plushieReactions) || { sniff: 4, ignore: 3, hug: 2, attack: 2 }) };
+      if (G.needs.get('energy') < 30) { w.attack = 0; w.hug = (w.hug || 0) * 2; }
+      if (t.dragging) w.hug = 0;
+      const kind = U.weighted(w);
+      G.bus.emit('plush:reaction', { kind, how });
+      if (PLUSH[kind]) await PLUSH[kind](t);
+    } catch (e) { console.warn('[plush]', e); }
+    finally { plushBusy = false; }
+    return true;
+  }
+
   G.reactions = {
+    plush: plushReaction,
+    PLUSH,
+    startle,
+
     init() {
       const b = G.bus;
       b.on('pet:tap', onTap);

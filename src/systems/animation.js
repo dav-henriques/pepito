@@ -2,9 +2,11 @@
    ANIMAÇÃO DAS IMAGENS (GSAP)
    --------------------------------------------------------------------------
    • escolhe a imagem certa para o estado (com fallbacks e detecção de falta)
-   • crossfade entre imagens
+   • usa a versão "recortada" (contorno/sombra/tamanho igualado) do cutout.js
+   • crossfade entre imagens com um "squash" de troca de expressão
+   • ajustes por imagem (petConfig → pet.imageTweaks)
    • "humor": animações idle por estado na camada .pet-mood
-     (respirar, quicar, coçar, cochilar…) — sem tocar na imagem original
+     (respirar, quicar, coçar, cochilar, encarar…) — sem tocar na imagem
    • acessórios posicionados pelos anchors do config
    A física (Anime.js) mexe nas camadas de fora; aqui só a camada de humor.
    ========================================================================== */
@@ -12,9 +14,10 @@
   'use strict';
   const U = G.util;
 
-  let moodEl, imgA, imgB, accEl, bubbleHost, foamEl;
+  let petEl, moodEl, imgA, imgB, accEl, bubbleHost, foamEl;
   let front = null, back = null;
   let currentSrc = '';
+  let currentKey = null;
   let currentMood = null;
   let moodTl = null;
   let moodTimers = [];
@@ -26,13 +29,19 @@
   /* ---------------- imagens ---------------- */
   function preload() {
     const imgs = G.config.pet.images;
+    const first = G.petState.display.image;
     const jobs = [];
     for (const key in imgs) {
+      if (!imgs[key]) { imgStatus[key] = 'missing'; continue; }
       imgStatus[key] = 'loading';
       jobs.push(new Promise((resolve) => {
         const im = new Image();
         im.decoding = 'async';
-        im.onload = () => { imgStatus[key] = 'ok'; resolve(); };
+        im.onload = () => {
+          imgStatus[key] = 'ok';
+          G.cutout.enqueue(key, im, key === 'normal' || key === first);
+          resolve();
+        };
         im.onerror = () => { imgStatus[key] = 'missing'; console.warn('[pet] imagem não encontrada:', imgs[key]); resolve(); };
         im.src = imgs[key];
       }));
@@ -40,35 +49,84 @@
     return Promise.all(jobs);
   }
 
-  function resolveSrc(key) {
+  /** Chave de imagem que vai aparecer de fato (segue os fallbacks) */
+  function resolveKey(key) {
     const imgs = G.config.pet.images;
     const fb = G.config.pet.imageFallbacks;
     const tried = new Set();
-    const queue = [key, ...(fb[key] || []), ...(fb['*'] || ['normal'])];
-    for (const k of queue) {
+    const queue = [key];
+    while (queue.length) {
+      const k = queue.shift();
       if (tried.has(k)) continue;
       tried.add(k);
-      if (imgs[k] && imgStatus[k] !== 'missing') return imgs[k];
+      if (imgs[k] && imgStatus[k] !== 'missing') return k;
+      queue.push(...(fb[k] || []));
     }
-    return imgs.normal;
+    for (const k of fb['*'] || ['normal']) if (imgs[k] && imgStatus[k] !== 'missing') return k;
+    return 'normal';
   }
 
-  function swapImage(key, quick, pop) {
-    const src = resolveSrc(key);
+  function srcFor(key) {
+    const r = G.cutout.result(key);
+    return r && r.url ? r.url : G.config.pet.images[key];
+  }
+
+  /** Esta imagem é uma foto sem recorte (vira "cartão de foto")? */
+  function isCardKey(key) {
+    const r = G.cutout.result(key);
+    if (r) return !!r.opaque;
+    return /\.jpe?g($|\?)/i.test(G.config.pet.images[key] || '');
+  }
+
+  /** Giros dos "humores" ficam mais contidos numa foto (num retângulo grande
+      qualquer giro aparece muito e parece que a foto está torta) */
+  const R = (deg) => deg * (isCardKey(currentKey || G.petState.display.image) ? (G.config.physics.photoDeform ?? 0.4) : 1);
+
+  /** Classes de visual + ajuste fino da imagem (escala, posição, giro, espelho) */
+  function applyLook(img, key) {
+    const tw = (G.config.pet.imageTweaks || {})[key] || {};
+    const raw = !G.cutout.result(key);
+    const path = G.config.pet.images[key] || '';
+    const L = G.config.pet.look || {};
+    img.classList.toggle('raw', raw);
+    img.classList.toggle('framed', raw && L.frameOpaque !== false && /\.jpe?g($|\?)/i.test(path));
+    const s = tw.scale || 1;
+    img._look = { s, sx: (tw.flip ? -1 : 1) * s };
+    gsap.set(img, {
+      xPercent: (tw.x || 0) * 100, yPercent: (tw.y || 0) * 100,
+      rotation: tw.rotate || 0, scaleX: img._look.sx, scaleY: s, transformOrigin: '50% 100%'
+    });
+  }
+
+  async function swapImage(key, quick, pop) {
+    const k = resolveKey(key);
+    const token = ++swapToken;
+    if (G.cutout.isPending(k)) {
+      await G.cutout.whenReady(k, quick ? 140 : 380);
+      if (token !== swapToken) return;
+    }
+    const src = srcFor(k);
     if (src === currentSrc) return;
     currentSrc = src;
-    const token = ++swapToken;
-    back.src = src;
+    currentKey = k;
+    const target = back;
+    target.src = src;
+    applyLook(target, k);
     const show = () => {
       if (token !== swapToken) return;
       const d = quick ? 0.08 : 0.18;
       gsap.killTweensOf([front, back], 'opacity');
       gsap.to(back, { opacity: 1, duration: d, ease: 'power1.out' });
       gsap.to(front, { opacity: 0, duration: d, ease: 'power1.in' });
-      if (pop) gsap.fromTo(back, { scale: 0.95 }, { scale: 1, duration: 0.4, ease: 'back.out(3)', transformOrigin: '50% 100%' });
+      if (pop) {
+        const L = back._look || { s: 1, sx: 1 };
+        gsap.fromTo(back, { scaleX: L.sx * 1.06, scaleY: L.s * 0.9 }, { scaleX: L.sx, scaleY: L.s, duration: 0.45, ease: 'back.out(3)' });
+      }
       const t = front; front = back; back = t;
+      if (isCardKey(k)) G.physics.straighten();     // foto nunca fica espelhada
+      G.bus.emit('pet:image', { key: k, src: G.config.pet.images[k] });
     };
-    if (back.decode) back.decode().then(show, show); else show();
+    if (target.decode) target.decode().then(show, show); else show();
   }
 
   /* ---------------- humores (loops GSAP) ---------------- */
@@ -95,9 +153,9 @@
 
     happy(el) {
       const tl = gsap.timeline({ repeat: -1 });
-      tl.to(el, { scaleY: 1.035, scaleX: 0.99, rotation: 2.2, duration: 0.55, ease: 'sine.inOut' })
+      tl.to(el, { scaleY: 1.035, scaleX: 0.99, rotation: R(2.2), duration: 0.55, ease: 'sine.inOut' })
         .to(el, { scaleY: 1, scaleX: 1, rotation: 0, duration: 0.55, ease: 'sine.inOut' })
-        .to(el, { scaleY: 1.035, scaleX: 0.99, rotation: -2.2, duration: 0.55, ease: 'sine.inOut' })
+        .to(el, { scaleY: 1.035, scaleX: 0.99, rotation: R(-2.2), duration: 0.55, ease: 'sine.inOut' })
         .to(el, { scaleY: 1, scaleX: 1, rotation: 0, duration: 0.55, ease: 'sine.inOut' });
       return tl;
     },
@@ -111,8 +169,8 @@
 
     playful(el) {
       return gsap.timeline({ repeat: -1 })
-        .to(el, { rotation: 4, y: -2, duration: 0.42, ease: 'sine.inOut' })
-        .to(el, { rotation: -4, y: 0, duration: 0.42, ease: 'sine.inOut' });
+        .to(el, { rotation: R(4), y: -2, duration: 0.42, ease: 'sine.inOut' })
+        .to(el, { rotation: R(-4), y: 0, duration: 0.42, ease: 'sine.inOut' });
     },
 
     sleeping(el) {
@@ -126,14 +184,14 @@
 
     eating(el) {
       return gsap.timeline({ repeat: -1 })
-        .to(el, { y: 2.5, rotation: 1.8, scaleY: 0.985, duration: 0.15, ease: 'power1.inOut' })
-        .to(el, { y: 0, rotation: -1.2, scaleY: 1, duration: 0.15, ease: 'power1.inOut' });
+        .to(el, { y: 2.5, rotation: R(1.8), scaleY: 0.985, duration: 0.15, ease: 'power1.inOut' })
+        .to(el, { y: 0, rotation: R(-1.2), scaleY: 1, duration: 0.15, ease: 'power1.inOut' });
     },
 
     bathing(el) {
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { rotation: 3, scaleY: 1.02, duration: 0.9, ease: 'sine.inOut' })
-        .to(el, { rotation: -3, scaleY: 1, duration: 0.9, ease: 'sine.inOut' });
+        .to(el, { rotation: R(3), scaleY: 1.02, duration: 0.9, ease: 'sine.inOut' })
+        .to(el, { rotation: R(-3), scaleY: 1, duration: 0.9, ease: 'sine.inOut' });
     },
 
     tired(el) {
@@ -145,12 +203,12 @@
         G.audio.play('yawn');
       });
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleY: 0.975, scaleX: 1.01, rotation: 1.5, duration: 2.2, ease: 'sine.inOut' });
+        .to(el, { scaleY: 0.975, scaleX: 1.01, rotation: R(1.5), duration: 2.2, ease: 'sine.inOut' });
     },
 
     weak(el) {
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleY: 0.965, scaleX: 1.015, rotation: -1.5, duration: 2.4, ease: 'sine.inOut' });
+        .to(el, { scaleY: 0.965, scaleX: 1.015, rotation: R(-1.5), duration: 2.4, ease: 'sine.inOut' });
     },
 
     sad(el) {
@@ -172,7 +230,7 @@
 
     held(el) {
       return gsap.timeline({ repeat: -1, yoyo: true })
-        .to(el, { scaleX: 1.025, scaleY: 0.985, rotation: 1.2, duration: 0.13, ease: 'sine.inOut' });
+        .to(el, { scaleX: 1.025, scaleY: 0.985, rotation: R(1.2), duration: 0.13, ease: 'sine.inOut' });
     },
 
     dizzy(el) {
@@ -181,14 +239,38 @@
         G.fx.spawn('star', p.x + U.rand(-24, 24), p.y + 16, { angle: U.rand(-2.6, -0.5) });
       });
       return gsap.timeline({ repeat: -1 })
-        .to(el, { rotation: 7, x: 3, duration: 0.45, ease: 'sine.inOut' })
-        .to(el, { rotation: -7, x: -3, duration: 0.45, ease: 'sine.inOut' });
+        .to(el, { rotation: R(7), x: 3, duration: 0.45, ease: 'sine.inOut' })
+        .to(el, { rotation: R(-7), x: -3, duration: 0.45, ease: 'sine.inOut' });
     },
 
     grumpy(el) {
       return gsap.timeline({ repeat: -1, repeatDelay: 0.6 })
         .to(el, { scaleX: 1.05, scaleY: 1.03, duration: 0.5, ease: 'sine.out' })
         .to(el, { scaleX: 1, scaleY: 1, duration: 0.8, ease: 'sine.inOut' });
+    },
+
+    /* encarando: totalmente imóvel… e se aproximando da tela bem devagar */
+    staring(el) {
+      return gsap.timeline({ repeat: -1, yoyo: true, repeatDelay: 0.8 })
+        .to(el, { scale: 1.045, duration: 3.2, ease: 'sine.inOut' });
+    },
+
+    /* confuso: inclina a "cabeça" para um lado, segura, inclina pro outro */
+    confused(el) {
+      return gsap.timeline({ repeat: -1, repeatDelay: 0.4 })
+        .to(el, { rotation: R(8), duration: 0.35, ease: 'back.out(2)' })
+        .to(el, { rotation: R(8), duration: 0.9 })
+        .to(el, { rotation: R(-5), duration: 0.4, ease: 'back.out(2)' })
+        .to(el, { rotation: R(-5), duration: 0.9 });
+    },
+
+    /* pose absurda: fica travado na pose, com tremidinhas de esforço */
+    silly(el) {
+      every(1500, 2600, () => {
+        gsap.fromTo(el, { x: -1.5 }, { x: 1.5, duration: 0.04, repeat: 5, yoyo: true, ease: 'none', onComplete: () => gsap.set(el, { x: 0 }) });
+      });
+      return gsap.timeline({ repeat: -1, yoyo: true })
+        .to(el, { scaleY: 1.02, rotation: R(-1.5), duration: 1.1, ease: 'sine.inOut' });
     }
   };
 
@@ -230,15 +312,17 @@
 
   const animation = {
     init() {
-      const pet = document.getElementById('pet');
-      moodEl = pet.querySelector('.pet-mood');
-      imgA = pet.querySelector('.pet-img.a');
-      imgB = pet.querySelector('.pet-img.b');
-      accEl = pet.querySelector('.pet-accessory');
-      foamEl = pet.querySelector('.pet-foam');
-      bubbleHost = pet.querySelector('.pet-bubble');
+      petEl = document.getElementById('pet');
+      moodEl = petEl.querySelector('.pet-mood');
+      imgA = petEl.querySelector('.pet-img.a');
+      imgB = petEl.querySelector('.pet-img.b');
+      accEl = petEl.querySelector('.pet-accessory');
+      foamEl = petEl.querySelector('.pet-foam');
+      bubbleHost = petEl.querySelector('.pet-bubble');
       front = imgA; back = imgB;
       gsap.set(moodEl, { transformOrigin: '50% 100%' });
+      petEl.classList.toggle('css-cutout', G.cutout.mode === 'css');
+      G.bus.on('cutout:mode', (m) => petEl.classList.toggle('css-cutout', m === 'css'));
 
       G.bus.on('state:display', ({ display, prev }) => {
         const quick = display.state === 'beingDragged' || prev.state === 'beingDragged' || display.state === 'airborne';
@@ -248,20 +332,43 @@
         placeAccessory(display.state);
         placeBubble(display.state);
       });
+
+      // a versão recortada da imagem atual ficou pronta depois → troca sem pulo
+      G.bus.on('cutout:ready', ({ key }) => {
+        if (key === currentKey) { currentSrc = ''; swapImage(G.petState.display.image, true, false); }
+      });
     },
 
     preload,
 
     /** Mostra a primeira imagem sem transição */
-    showInitial() {
+    async showInitial() {
       const d = G.petState.display;
-      currentSrc = resolveSrc(d.image);
+      const k = resolveKey(d.image);
+      await G.cutout.whenReady(k, 900);
+      currentKey = k;
+      currentSrc = srcFor(k);
       front.src = currentSrc;
+      applyLook(front, k);
       gsap.set(front, { opacity: 1 });
       gsap.set(back, { opacity: 0 });
+      if (isCardKey(k)) G.physics.face(G.physics.facing, true);   // foto: sem espelho desde o início
       setMood(d.mood || 'normal');
       placeBubble(d.state);
+      G.bus.emit('pet:image', { key: k, src: G.config.pet.images[k] });
     },
+
+    /** "Flash" no pet (foto tirada, susto) */
+    flash() {
+      if (U.reducedMotion) return;
+      gsap.fromTo(moodEl, { filter: 'brightness(2.1) saturate(0.6)' }, { filter: 'brightness(1) saturate(1)', duration: 0.5, ease: 'power2.out', clearProps: 'filter' });
+    },
+
+    /** Chave e arquivo da imagem que está aparecendo agora */
+    get current() { return { key: currentKey, file: G.config.pet.images[currentKey] }; },
+
+    /** A imagem que está aparecendo é uma foto (cartão)? */
+    get isCard() { return isCardKey(currentKey || G.petState.display.image); },
 
     setAccessory(id) {
       accessoryId = id || 'none';

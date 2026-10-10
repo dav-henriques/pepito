@@ -3,89 +3,43 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
-  <meta name="theme-color" content="#2f3d55">
+  <meta name="theme-color" content="#ffffff">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="description" content="Um bichinho virtual que vive no seu celular.">
-  <title>Pepito</title>
-  <link rel="icon" href="assets/pet/happy.png">
+  <meta name="description" content="Um gato muito estranho que mora num quartinho dentro do seu celular.">
+  <title>pepito</title>
+  <link rel="icon" href="assets/pet/happy.jpg">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Caveat:wght@500;700&family=Fredoka:wght@400;500;600;700&family=VT323&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles/main.css">
 </head>
 <body>
   <div id="app">
     <main id="room" class="room" aria-label="Quarto do pet">
-
-      <!-- ============ PAREDE (objetos fixos) ============ -->
-      <div class="wall" aria-hidden="false">
-        <div class="wall-pattern"></div>
-
-        <button class="window obj-wall" data-hit="window" aria-label="Janela">
-          <span class="sky">
-            <span class="sun"></span>
-            <span class="moon"></span>
-            <span class="stars"><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
-            <span class="cloud c1"></span>
-            <span class="cloud c2"></span>
-            <span class="shooting-star"></span>
-          </span>
-          <img data-asset="environment.window" alt="" draggable="false">
-        </button>
-
-        <button class="lamp obj-wall" data-hit="lamp" aria-label="Luminária">
-          <img data-asset="environment.lamp" alt="" draggable="false">
-        </button>
-
-        <button class="clock obj-wall" data-hit="clock" aria-label="Relógio">
-          <img data-asset="environment.clock" alt="" draggable="false">
-          <i class="hand hour"></i><i class="hand min"></i><i class="pin"></i>
-        </button>
-
-        <button class="picture obj-wall" data-hit="picture" aria-label="Quadro">
-          <img data-asset="environment.picture" alt="" draggable="false">
-        </button>
-
-        <div class="shelf">
-          <button class="radio" data-hit="radio" aria-label="Rádio">
-            <img data-asset="environment.radio" alt="" draggable="false">
-          </button>
-          <button class="laser-pointer" data-hit="laser" aria-label="Caneta laser">
-            <img data-asset="toys.laser" alt="" draggable="false">
-          </button>
-          <img class="shelf-img" data-asset="environment.shelf" alt="" draggable="false">
-        </div>
-
-        <div class="baseboard"></div>
-      </div>
-
-      <!-- ============ CHÃO ============ -->
-      <div class="floor"><div class="floor-shade"></div></div>
+      <!-- Fundo branco. Só o chão (invisível) onde o pet anda, com os móveis.
+           Cada móvel é uma imagem (assets/room/…), como o gato.
+           Cama e banheira usam a mesma imagem duas vezes: atrás do pet e,
+           recortada, na frente dele (petConfig → furniture.frontClip). -->
 
       <!-- ============ MUNDO (ordenado por profundidade) ============ -->
       <div class="world" id="world">
-        <div class="rug" data-zone="rug"><img id="rug-img" data-asset="environment.rugSun" alt="" draggable="false"></div>
-
-        <button class="obj plant" data-hit="plant" data-zone="plant" aria-label="Planta">
-          <img data-asset="environment.plant" alt="" draggable="false">
-          <span class="plant-flower"></span>
-        </button>
-
         <button class="obj bed" data-hit="bed" data-zone="bed" aria-label="Caminha">
-          <img data-asset="environment.bed" alt="" draggable="false">
+          <img data-asset="room.bed" alt="" draggable="false">
         </button>
-        <div class="obj bed bed-front" aria-hidden="true"><img data-asset="environment.bed" alt="" draggable="false"></div>
+        <div class="obj bed bed-front" aria-hidden="true"><img data-asset="room.bed" alt="" draggable="false"></div>
 
         <button class="obj bowl" data-hit="bowl" data-zone="bowl" aria-label="Pote de comida">
-          <img data-asset="environment.bowl" alt="" draggable="false">
+          <img data-asset="room.bowl" alt="" draggable="false">
           <span class="bowl-food"></span>
         </button>
 
-        <div class="obj tub-back" data-zone="tub"><img data-asset="environment.tubBack" alt="" draggable="false"></div>
-        <button class="obj tub-front" data-hit="tub" aria-label="Banheira">
+        <div class="obj tub-back" data-zone="tub">
+          <img data-asset="room.bathtub" alt="" draggable="false">
           <span class="tub-water"><span class="tub-foam"></span></span>
-          <img data-asset="environment.tubFront" alt="" draggable="false">
+        </div>
+        <button class="obj tub-front" data-hit="tub" aria-label="Banheira">
+          <img data-asset="room.bathtub" alt="" draggable="false">
         </button>
 
         <!-- Sombra do pet (no chão) -->
@@ -116,9 +70,8 @@
         </div>
       </div>
 
-      <!-- Luz do dia/noite + luminária -->
-      <div class="light-tint"></div>
-      <div class="lamp-light"></div>
+      <!-- Flash de câmera (pose absurda) -->
+      <div class="flash" id="flash" aria-hidden="true"></div>
 
       <!-- Partículas -->
       <div class="fx" id="fx"></div>
@@ -143,6 +96,8 @@
             </button>
           </div>
         </header>
+        <!-- o que o pet está fazendo (sempre visível) -->
+        <div class="status-line" id="status-line"></div>
 
         <div class="hint" id="hint" role="status"></div>
         <div class="toast" id="toast" role="status"></div>
@@ -155,6 +110,7 @@
     <div class="loader-paw">
       <svg viewBox="0 0 24 24"><use href="#i-paw"/></svg>
     </div>
+    <p class="loader-text">arrumando o quarto…</p>
   </div>
 
   <!-- Aviso caso as bibliotecas não carreguem (sem internet) -->
@@ -195,9 +151,12 @@
   <script src="https://cdn.jsdelivr.net/npm/animejs@4.5.0/dist/bundles/anime.umd.min.js"></script>
 
   <!-- ============ JOGO (ordem importa) ============ -->
-  <script src="src/config/petConfig.js"></script>
+  <!-- configuração: caminhos → conteúdo pessoal → regras do jogo -->
   <script src="src/config/assets.js"></script>
+  <script src="src/config/personal.js"></script>
+  <script src="src/config/petConfig.js"></script>
   <script src="src/core/core.js"></script>
+  <script src="src/core/media.js"></script>
 
   <script src="src/components/icons.js"></script>
   <script src="src/components/particles.js"></script>
@@ -210,6 +169,7 @@
   <script src="src/systems/needs.js"></script>
   <script src="src/systems/progress.js"></script>
   <script src="src/systems/petState.js"></script>
+  <script src="src/systems/cutout.js"></script>
   <script src="src/systems/physics.js"></script>
   <script src="src/systems/animation.js"></script>
   <script src="src/systems/interaction.js"></script>
@@ -217,9 +177,9 @@
   <script src="src/systems/bath.js"></script>
   <script src="src/systems/play.js"></script>
   <script src="src/systems/reactions.js"></script>
+  <script src="src/systems/speech.js"></script>
   <script src="src/systems/behavior.js"></script>
   <script src="src/systems/objects.js"></script>
-  <script src="src/systems/easterEggs.js"></script>
 
   <script src="src/components/hud.js"></script>
   <script src="src/components/customize.js"></script>

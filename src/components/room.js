@@ -27,8 +27,23 @@
     init() {
       this.el = document.getElementById('room');
       this.world = document.getElementById('world');
-      // Caminhos de imagens vindos do registro central (assets.js)
-      for (const img of U.$$('img[data-asset]')) img.src = G.asset(img.dataset.asset);
+      // contorno de recorte / borda dos cartões de foto (petConfig → pet.look) valem para tudo
+      const L = G.config.pet.look || {};
+      this.el.classList.toggle('no-outline', L.outline === false);
+      this.el.classList.toggle('no-card-border', L.cardBorder === false);
+      // Caminhos de imagens vindos do registro central (assets.js), com fallback.
+      // Os móveis usam o mesmo visual de "recorte" do gato (contorno + sombra);
+      // foto JPG sem transparência vira um cartão de foto.
+      for (const img of U.$$('img[data-asset]')) {
+        G.media.img(img, img.dataset.asset);
+        img.classList.add('cut');
+        if (/\.jpe?g($|\?)/i.test(G.asset(img.dataset.asset))) img.classList.add('photo-card');
+      }
+      // re-mede quando as imagens chegam (a altura vem da proporção de cada arquivo)
+      for (const img of U.$$('.world img[data-asset]')) {
+        if (!img.complete) img.addEventListener('load', () => { this.measure(); G.bus.emit('room:resize', this); }, { once: true });
+      }
+      this.applyFurniture();
       this.measure();
       let raf = 0;
       const onResize = () => {
@@ -65,7 +80,15 @@
       this.measureZones();
     },
 
+    /** Caixa do elemento no quarto pelo layout (ignora transforms: medir no meio
+        da animação de entrada dos móveis não pode deslocar as zonas) */
     rectOf(el) {
+      let x = 0, y = 0, n = el;
+      while (n && n !== this.el) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+      if (n === this.el && el.offsetWidth) {
+        const w = el.offsetWidth, h = el.offsetHeight;
+        return { x0: x, y0: y, x1: x + w, y1: y + h, w, h };
+      }
       const r = el.getBoundingClientRect();
       return { x0: r.left - this.left, y0: r.top - this.top, x1: r.right - this.left, y1: r.bottom - this.top, w: r.width, h: r.height };
     },
@@ -98,30 +121,37 @@
       const bowl = this.rectOf(q('.bowl'));
       z.bowl = { ...bowl, cx: (bowl.x0 + bowl.x1) / 2, cz: bowl.y1 - bowl.h * 0.25 };
 
-      const plant = this.rectOf(q('.plant'));
-      z.plant = { ...plant, cx: (plant.x0 + plant.x1) / 2, cz: plant.y1 - 4 };
-
-      const rug = this.rectOf(q('.rug'));
-      z.rug = { ...rug, cx: (rug.x0 + rug.x1) / 2, cz: (rug.y0 + rug.y1) / 2 };
-
-      const win = this.rectOf(q('.window'));
-      z.window = { ...win, cx: (win.x0 + win.x1) / 2, cy: (win.y0 + win.y1) / 2 };
-
-      const radio = this.rectOf(q('.radio'));
-      z.radio = { ...radio, cx: (radio.x0 + radio.x1) / 2, cy: (radio.y0 + radio.y1) / 2 };
-
-      const lamp = this.rectOf(q('.lamp'));
-      z.lamp = { ...lamp, cx: (lamp.x0 + lamp.x1) / 2, cy: lamp.y1 };
-
       this.zones = z;
 
       // profundidade dos móveis (quem está mais "na frente" fica por cima)
       q('.bed').style.zIndex = Math.round(bed.y0 + bed.h * 0.3);
       q('.bed-front').style.zIndex = Math.round(bed.y1) + 2;
-      q('.plant').style.zIndex = Math.round(plant.y1);
       q('.bowl').style.zIndex = Math.round(bowl.y1);
       q('.tub-back').style.zIndex = Math.round(tub.y0 + tub.h * 0.3);
       q('.tub-front').style.zIndex = Math.round(tub.y1) + 2;
+    },
+
+    /** Ajustes das imagens dos móveis (petConfig → furniture) viram variáveis CSS */
+    applyFurniture() {
+      const F = G.config.furniture || {};
+      const s = this.el.style;
+      const pct = (v) => (v * 100).toFixed(2) + '%';
+      if (F.bed) s.setProperty('--bed-front', pct(F.bed.frontClip ?? 0.8));
+      if (F.bathtub) {
+        s.setProperty('--tub-front', pct(F.bathtub.frontClip ?? 0.39));
+        const w = F.bathtub.water || {};
+        s.setProperty('--water-top', pct(w.top ?? 0.285));
+        s.setProperty('--water-left', pct(w.left ?? 0.07));
+        s.setProperty('--water-right', pct(w.right ?? 0.07));
+        s.setProperty('--water-h', pct(w.height ?? 0.17));
+      }
+      if (F.bowl && F.bowl.food) {
+        const f = F.bowl.food;
+        s.setProperty('--food-left', pct(f.left ?? 0.17));
+        s.setProperty('--food-top', pct(f.top ?? -0.36));
+        s.setProperty('--food-w', pct(f.width ?? 0.66));
+        s.setProperty('--food-h', pct(f.height ?? 0.66));
+      }
     },
 
     /** client (tela) → coordenadas locais do quarto */
@@ -157,7 +187,7 @@
       return x > b.x0 + b.w * 0.08 && x < b.x1 - b.w * 0.08 && z > b.y0 - this.petH * 0.22 && z < b.y1 + 8;
     },
 
-    /** Ponto aleatório no chão, evitando banheira/pote/planta */
+    /** Ponto aleatório no chão, evitando banheira/cama/pote */
     randomFloorPoint(opts = {}) {
       const g = this.geo;
       const pad = this.petW * 0.25;
@@ -166,7 +196,6 @@
         const z = U.rand(opts.z0 ?? g.zMin + 8, opts.z1 ?? g.zMax - 6);
         if (this.inFootprint('tub', x, z, pad) || this.inFootprint('bed', x, z, 4)) continue;
         if (Math.abs(x - this.zones.bowl.cx) < this.zones.bowl.w * 0.6 && Math.abs(z - this.zones.bowl.cz) < 26) continue;
-        if (x < this.zones.plant.x1 && z < this.zones.plant.y1 + 14) continue;
         return { x, z };
       }
       return { x: this.W / 2, z: (g.zMin + g.zMax) / 2 };

@@ -7,31 +7,37 @@
      emotion   → happy / excited / clean / grumpy / dizzy… (com duração)
      condition → derivada das necessidades (hungry, dirty, tired, sad…)
    O estado EXIBIDO é o de maior prioridade que tenha imagem.
-   Para criar um estado novo: adicione em STATES (prioridade + imagem + humor)
-   e uma imagem em petConfig.pet.images.
+   Para criar um estado novo: adicione em STATES (prioridade + imagem + humor),
+   coloque a imagem em src/config/assets.js → pet e use petState.emote('nome').
    ========================================================================== */
 (function (G) {
   'use strict';
 
-  /* prioridade: maior vence.  image: chave em pet.images (null = deixa passar)
+  /* prioridade: maior vence.  image: chave em assets.js → pet (null = deixa passar)
      mood: nome da animação idle (GSAP) em animation.js */
   const STATES = {
     dizzy:        { priority: 120, image: 'dizzy',      mood: 'dizzy' },
-    beingDragged: { priority: 100, image: 'held',       mood: 'held' },
-    airborne:     { priority: 98,  image: 'held',       mood: 'none' },
+    beingDragged: { priority: 100, image: 'beingHeld',  mood: 'held' },
+    airborne:     { priority: 98,  image: 'flying',     mood: 'none' },
     beingHeld:    { priority: 97,  image: null,         mood: null },     // apenas pressionado: mantém expressão atual
     bathing:      { priority: 90,  image: 'bathing',    mood: 'bathing' },
     eating:       { priority: 85,  image: 'eating',     mood: 'eating' },
     sleeping:     { priority: 80,  image: 'sleeping',   mood: 'sleeping' },
-    grumpy:       { priority: 74,  image: 'grumpy',     mood: 'grumpy' },
+    startled:     { priority: 78,  image: 'beingHeld',  mood: 'held' },   // susto exagerado
+    sillyPose:    { priority: 76,  image: 'sillyPose',  mood: 'silly' },
+    grumpy:       { priority: 74,  image: 'angry',      mood: 'grumpy' },
+    angry:        { priority: 74,  image: 'angry',      mood: 'grumpy' }, // apelido de grumpy
     clean:        { priority: 73,  image: 'clean',      mood: 'happy' },
     excited:      { priority: 72,  image: 'excited',    mood: 'excited' },
+    confused:     { priority: 71,  image: 'confused',   mood: 'confused' },
     happy:        { priority: 70,  image: 'happy',      mood: 'happy' },
     sadEmote:     { priority: 69,  image: 'sad',        mood: 'sad' },
+    sleepy:       { priority: 68,  image: 'sleepy',     mood: 'tired' },  // emoção de sono (emote('sleepy'))
+    staring:      { priority: 66,  image: 'staring',    mood: 'staring' },
     playing:      { priority: 60,  image: 'playful',    mood: 'playful' },
     veryHungry:   { priority: 50,  image: 'veryHungry', mood: 'weak' },
     veryDirty:    { priority: 48,  image: 'veryDirty',  mood: 'itchy' },
-    tired:        { priority: 45,  image: 'tired',      mood: 'tired' },
+    tired:        { priority: 45,  image: 'sleepy',     mood: 'tired' },
     hungry:       { priority: 40,  image: 'hungry',     mood: 'normal' },
     dirty:        { priority: 38,  image: 'dirty',      mood: 'itchy' },
     sad:          { priority: 35,  image: 'sad',        mood: 'sad' },

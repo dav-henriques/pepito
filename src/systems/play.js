@@ -3,33 +3,46 @@
    • Brinquedos são objetos (GSAP): arrastar, arremessar, quicar, rolar.
    • O pet persegue (física Anime.js via physics.walkTo/jumpTo), tenta
      alcançar, dá o bote, rouba da sua mão se você deixar perto.
-   • Laser: toque na caneta da prateleira e mexa o dedo pelo quarto.
-   Brinquedo novo: adicione em TOY_DEFS + assets.js (toys).
+   • Pelúcia (chase: false): o pet não persegue — ele REAGE quando você
+     aproxima (cheira, ignora, abraça ou ataca; ver reactions.js).
+   Brinquedo novo: física em petConfig.toys, nome/liga-desliga em
+   personal.js → toys, imagem em assets.js → toys.
    ========================================================================== */
 (function (G) {
   'use strict';
   const U = G.util;
 
-  const TOY_DEFS = {
-    ball:  { label: 'Bolinha', size: 10, bounce: 'bounce.out', friction: 1, roll: true, sound: 'squeak', weight: 1, start: { x: 0.46, z: 0.84 } },
-    yarn:  { label: 'Novelo', size: 11, bounce: 'bounce.out', friction: 1.6, roll: true, sound: 'pop', weight: 1.3, string: true, start: { x: 0.64, z: 0.69 } },
-    mouse: { label: 'Ratinho de corda', size: 13, bounce: 'power2.in', friction: 2.2, roll: false, sound: 'squeak', weight: 0.8, windup: true, start: { x: 0.28, z: 0.79 } }
-  };
+  /** Brinquedos ligados: física (petConfig.toys) + nome (personal.js → toys) */
+  function buildDefs() {
+    const C = G.config.toys || {};
+    const P = (G.personal && G.personal.toys) || {};
+    const out = {};
+    for (const id in C) {
+      const p = P[id] || {};
+      if (p.enabled === false) continue;
+      out[id] = { ...C[id], label: p.name || id, showName: !!p.showName };
+    }
+    return out;
+  }
+  let TOY_DEFS = {};
 
   const toys = {};
   const dirty = new Set();
   let world, stringSvg;
   let session = null;
-  let laser = null;
 
   /* ======================================================================
      BRINQUEDO
      ====================================================================== */
   function makeToy(id) {
     const def = TOY_DEFS[id];
-    const el = U.h('div', { class: 'toy ' + id, dataset: { hit: 'toy', toy: id }, role: 'button', 'aria-label': def.label });
+    const isPhoto = !/\.svg($|\?)/i.test(G.asset(def.asset || 'toys.' + id));
+    const el = U.h('div', { class: 'toy ' + id + (def.plush ? ' plush' : '') + (isPhoto ? ' cutout' : ''), dataset: { hit: 'toy', toy: id }, role: 'button', 'aria-label': def.label });
     el.style.setProperty('--size', def.size);
-    const wrap = U.h('div', { class: 'toy-img' }, [U.h('img', { src: G.asset('toys.' + id), alt: '', draggable: 'false' })]);
+    if (def.heightRatio) el.style.setProperty('--hr', def.heightRatio);
+    const im = U.h('img', { alt: '', draggable: 'false' });
+    G.media.img(im, def.asset || 'toys.' + id);
+    const wrap = U.h('div', { class: 'toy-img' }, [im]);
     el.appendChild(wrap);
     const shadow = U.h('div', { class: 'toy-shadow' });
     world.append(shadow, el);
@@ -48,9 +61,8 @@
 
   function measureToy(t) {
     t.w = G.room.u * t.def.size;
-    t.hh = id2h(t);
+    t.hh = t.w * (t.def.heightRatio || 1);
   }
-  function id2h(t) { return t.id === 'mouse' ? G.room.u * 8 : t.w; }
 
   function mark(t) { dirty.add(t); }
 
@@ -60,12 +72,13 @@
       const s = G.room.depthScale(t.z);
       if (t.def.roll) {
         t.rot += ((t.x - t.lastX) / (t.w / 2)) * (180 / Math.PI);
+      } else if (t.def.spin && !t.dragging && t.h > 2) {
+        t.rot += (t.x - t.lastX) * 1.6 + 4;          // gira no ar e cai do jeito que der
       }
       t.lastX = t.x;
       t.el.style.transform = `translate3d(${(t.x - t.w / 2).toFixed(1)}px,${(t.z - t.h - t.hh).toFixed(1)}px,0) scale(${s.toFixed(3)})`;
       t.el.style.transformOrigin = '50% 100%';
       t.wrap.style.transform = t.def.roll ? `rotate(${t.rot.toFixed(1)}deg)` : `scaleX(${t.face}) rotate(${t.rot.toFixed(1)}deg)`;
-      t.el.style.zIndex = t.dragging ? 4999 : Math.round(t.z);
       const sw = G.room.u * 9;
       const sc = U.clamp(1 - t.h / 220, 0.3, 1) * s;
       t.shadow.style.transform = `translate3d(${(t.x - sw / 2).toFixed(1)}px,${(t.z - G.room.u * 1.2).toFixed(1)}px,0) scale(${sc.toFixed(3)})`;
@@ -74,6 +87,40 @@
       if (t.def.string) updateString(t);
     }
     dirty.clear();
+  }
+
+  /** Profundidade dos brinquedos (todo quadro): normalmente pela posição no chão,
+      mas um brinquedo atrás do gato e coberto por ele passa para a frente —
+      a foto do gato é um cartão opaco grande e esconderia o brinquedo inteiro. */
+  let petEl = null;
+  function toyDepth() {
+    if (!petEl) petEl = document.getElementById('pet');
+    const P = G.physics.P;
+    const petZ = parseInt(petEl.style.zIndex, 10) || Math.round(P.z) + 1;
+    const s = G.room.depthScale(P.z);
+    const { w, h } = G.physics.size;
+    const px0 = P.x - w * s * 0.47, px1 = P.x + w * s * 0.47;
+    const py1 = P.z - P.h, py0 = py1 - h * s * 0.97;
+    for (const t of Object.values(toys)) {
+      let zi;
+      if (t.dragging) zi = 4999;
+      else {
+        zi = Math.round(t.z);
+        let front = false;
+        if (zi <= petZ && petZ < 4000) {
+          // quanto do brinquedo o cartão cobre (com folga para não ficar piscando na borda)
+          const ts = G.room.depthScale(t.z);
+          const tw = t.w * ts, th = t.hh * ts;
+          const ty1 = t.z - t.h, ty0 = ty1 - th;
+          const ox = Math.min(t.x + tw / 2, px1) - Math.max(t.x - tw / 2, px0);
+          const oy = Math.min(ty1, py1) - Math.max(ty0, py0);
+          const cover = ox > 0 && oy > 0 ? (ox * oy) / (tw * th) : 0;
+          if (cover > (t._front ? 0.08 : 0.25)) { zi = petZ + 1; front = true; }
+        }
+        t._front = front;
+      }
+      if (zi !== t._zi) { t.el.style.zIndex = zi; t._zi = zi; }
+    }
   }
 
   /* ---------- fio do novelo ---------- */
@@ -239,6 +286,8 @@
         if (t.stolen) return;
         if (!moved && !cancelled) {
           // toque simples
+          if (t.def.showName) G.hud.tag(t.el, t.def.label);
+          if (t.def.plush) { squish(t); G.bus.emit('toy:squish', t); return; }
           if (t.def.windup) windUp(t);
           else kick(t, U.pick([-1, 1]), 0.6);
           G.bus.emit('toy:move', t);
@@ -272,6 +321,7 @@
           qx(ax); qz(z); qh(Math.max(0, z - ay));
           t.lastMoved = U.now();
           G.bus.emit('toy:move', t);
+          if (t.def.plush) plushNear(t, ax, ay - t.hh / 2);
         },
         up() { end(false); },
         cancel() { end(true); }
@@ -279,71 +329,34 @@
     }
   };
 
-  /* ======================================================================
-     LASER
-     ====================================================================== */
-  function laserOn() {
-    if (laser) return laserOff();
-    const btn = document.querySelector('.laser-pointer');
-    btn.classList.add('on');
-    const dot = U.h('div', { class: 'laser-dot' });
-    world.appendChild(dot);
-    const geo = G.room.geo;
-    laser = { dot, btn, x: G.room.W * 0.5, y: (geo.zMin + geo.zMax) / 2, onPet: 0, until: Date.now() + G.config.play.laserDuration };
-    const L = laser;
-    const target = { x: L.x, y: L.y };
-    gsap.set(dot, { x: L.x, y: L.y, opacity: 0, scale: 0 });
-    gsap.to(dot, { opacity: 1, scale: 1, duration: 0.25, ease: 'back.out(3)' });
-    L.flicker = gsap.to(dot, { scale: 0.85, duration: 0.07, repeat: -1, yoyo: true, ease: 'none' });
-    L.qx = gsap.quickTo(target, 'x', { duration: 0.08, onUpdate: () => { L.x = target.x; gsap.set(dot, { x: L.x }); } });
-    L.qy = gsap.quickTo(target, 'y', { duration: 0.08, onUpdate: () => { L.y = target.y; gsap.set(dot, { y: L.y }); } });
-    L.target = target;
-    G.audio.play('zap');
-    G.interaction.setOverride(laserOverride);
-    L.timer = setInterval(() => { if (Date.now() > L.until) laserOff(); }, 500);
-    startSession({ laser: true });
-    G.bus.emit('laser:on');
+  /* ---------- pelúcia ---------- */
+  function squish(t) {
+    const im = t.wrap.firstChild;
+    gsap.fromTo(im, { scaleY: 0.7, scaleX: 1.24 }, { scaleY: 1, scaleX: 1, duration: 0.85, ease: 'elastic.out(1, .3)', transformOrigin: '50% 100%' });
+    G.audio.play('squish', { pitch: U.rand(0.9, 1.15) });
+    if (G.petState.can('autonomous')) G.physics.faceTo(t.x);
   }
 
-  function laserOff() {
-    if (!laser) return;
-    const L = laser; laser = null;
-    clearInterval(L.timer);
-    L.flicker.kill();
-    L.btn.classList.remove('on');
-    gsap.to(L.dot, { opacity: 0, scale: 0, duration: 0.2, onComplete: () => L.dot.remove() });
-    G.interaction.clearOverride(laserOverride);
-    G.audio.play('click');
-    G.bus.emit('laser:off');
-  }
-
-  const laserOverride = {
-    down(pt, e, el, kind) {
-      if (!laser) return null;
-      if (kind === 'laser') return null; // tocar a caneta de novo desliga
-      const move = (p) => {
-        if (!laser) return;
-        laser.until = Math.max(laser.until, Date.now() + 6000);
-        laser.qx(U.clamp(p.x, 6, G.room.W - 6));
-        laser.qy(U.clamp(p.y, G.room.geo.top + 10, G.room.H - 6));
-        laser.lastMoved = U.now();
-      };
-      move(pt);
-      return { move, up() {}, cancel() {} };
+  /** Segurou a pelúcia pertinho da cara do pet → ele reage (x, y = onde o dedo está levando) */
+  function plushNear(t, x, y) {
+    const head = G.physics.anchorPoint('eyes');
+    const close = Math.hypot(x - head.x, y - head.y) < G.room.petW * 0.55;
+    const now = U.now();
+    if (!close) { t.nearSince = 0; return; }
+    if (t.nearSince === -1) return;              // já reagiu nesta aproximação
+    if (!t.nearSince) t.nearSince = now;
+    if (now - t.nearSince > 450) {
+      t.nearSince = -1;
+      G.reactions.plush(t, 'offered');
     }
-  };
+  }
 
   /* ======================================================================
      SESSÃO DE BRINCADEIRA (o pet persegue o alvo)
      ====================================================================== */
   function targetOf(s) {
-    if (s.laser) {
-      if (!laser) return null;
-      const geo = G.room.geo;
-      const z = U.clamp(laser.y, geo.zMin, geo.zMax);
-      return { x: laser.x, z, h: Math.max(0, z - laser.y), laser: true, moving: U.now() - (laser.lastMoved || 0) < 400 };
-    }
     const t = s.toy;
+    if (!t) return null;
     return { x: t.x, z: t.z, h: t.h, toy: t, moving: t.dragging || t.running || U.now() - t.lastMoved < 300 };
   }
 
@@ -352,19 +365,18 @@
     if (!ps.can('play')) {
       if (!ps.activity && !ps.physical) {
         // sem energia: só olha
-        const tg = opts.laser ? { x: laser?.x || 0 } : opts.toy;
+        const tg = opts.toy;
         if (tg && G.physics.isIdle()) G.physics.faceTo(tg.x);
         if (G.needs.get('energy') <= G.config.play.minEnergyToPlay && !G.bubble.visible) G.bubble.show('z', { duration: 1400 });
       }
       return;
     }
     if (session) {
-      if (opts.laser) session.laser = true;
-      else if (!session.laser) session.toy = opts.toy;
+      session.toy = opts.toy;
       session.lastSeen = U.now();
       return;
     }
-    session = { toy: opts.toy, laser: !!opts.laser, started: U.now(), lastSeen: U.now(), busy: false, catches: 0, lastAction: 0 };
+    session = { toy: opts.toy, started: U.now(), lastSeen: U.now(), busy: false, catches: 0, lastAction: 0 };
     ps.setActivity('playing');
     G.physics.setPose('stand');
     const tg = targetOf(session);
@@ -391,7 +403,6 @@
     const ps = G.petState;
     if (ps.physical || ps.activity !== 'playing') return endSession('interrupted');
     if (G.needs.get('energy') <= G.config.play.minEnergyToPlay * 0.7) return endSession('tired');
-    if (s.laser && !laser) { s.laser = false; if (!s.toy) return endSession('laserOff'); }
     const tg = targetOf(s);
     if (!tg) return endSession('noTarget');
     if (tg.moving) s.lastSeen = U.now();
@@ -405,7 +416,7 @@
     const dist = Math.hypot(tg.x - pawX, tg.z - P.z);
     const reach = cfg.maxJumpReach;
 
-    // alvo no ar (você segurando o brinquedo, ou o laser na parede):
+    // alvo no ar (você segurando o brinquedo):
     // compara na TELA a cabeça do pet com o alvo e pula tentando alcançar
     if (tg.h > 30) {
       const petH = G.room.petH * G.room.depthScale(P.z);
@@ -420,7 +431,7 @@
         G.needs.add({ energy: -cfg.energyPerPounce * 0.6 }, 'play');
         const t2 = targetOf(s);
         if (t2 && t2.toy && t2.toy.dragging && gap < reach - 10 && Math.abs(t2.x - G.physics.P.x) < G.room.petW * 0.6) steal(t2.toy);
-        else if (Math.random() < 0.3) G.bubble.show(tg.laser ? '?' : '!!', { duration: 700 });
+        else if (Math.random() < 0.3) G.bubble.show('!!', { duration: 700 });
         await U.wait(250);
         s.busy = false;
         return;
@@ -451,7 +462,7 @@
       s.lastAction = U.now();
       G.physics.setPose('crouch');
       G.physics.faceTo(tg.x);
-      await U.wait(tg.laser ? 120 : 220);
+      await U.wait(220);
       G.physics.setPose('stand');
       const side = Math.sign(tg.x - P.x) || facing;
       const ok = await G.physics.jumpTo(tg.x - side * G.room.petW * 0.18, tg.z, { height: U.clamp(dist * 0.4 + tg.h, 26, 80), kind: 'pounce' });
@@ -461,7 +472,6 @@
       if (t2) {
         const d2 = Math.hypot(t2.x - (G.physics.P.x + G.physics.facing * G.room.petW * 0.22), t2.z - G.physics.P.z);
         if (d2 < cfg.catchRadius * 1.5 && t2.h < 40) await catchTarget(t2);
-        else if (t2.laser) { G.bubble.show('?', { duration: 700 }); }
       }
       s.busy = false;
       return;
@@ -474,7 +484,7 @@
       if (G.room.inFootprint('tub', goal.x, goal.z, 10)) { return; }
       s.walkTarget = { x: tg.x, z: tg.z };
       if (G.physics.isIdle() || G.physics.mode === 'walk') {
-        G.physics.walkTo(goal.x, goal.z, { run: dist > 60, speedMul: tg.laser ? 1.25 : 1 }).then(() => { if (session === s) s.walkTarget = null; });
+        G.physics.walkTo(goal.x, goal.z, { run: dist > 60 }).then(() => { if (session === s) s.walkTarget = null; });
       }
     }
   }
@@ -488,14 +498,6 @@
     G.progress.addXp(cfg.xpPerCatch, 'play');
     G.needs.add({ happiness: cfg.happinessPerCatch, energy: -cfg.energyPerPounce * 0.5, cleanliness: -cfg.cleanlinessPerCatch }, 'play');
     G.physics.squash(0.14);
-    if (tg.laser) {
-      // laser não dá pra pegar…
-      G.physics.wobble(12);
-      G.bubble.show(U.pick(['?', '?!', 'dots']), { duration: 900 });
-      G.bus.emit('play:laserCatch');
-      await U.wait(380);
-      return;
-    }
     const t = tg.toy;
     if (t.dragging) { steal(t); await U.wait(300); return; }
     if (t.def.windup) {
@@ -553,6 +555,7 @@
   G.play = {
     init() {
       world = document.getElementById('world');
+      TOY_DEFS = buildDefs();
       for (const id of Object.keys(TOY_DEFS)) makeToy(id);
 
       // fio do novelo (SVG do tamanho do quarto)
@@ -561,16 +564,20 @@
       stringSvg.setAttribute('class', 'yarn-string');
       stringSvg.style.position = 'absolute';
       stringSvg.style.zIndex = '2';
-      const path = document.createElementNS(NS, 'path');
-      path.setAttribute('fill', 'none');
-      path.setAttribute('stroke', '#3f7f7a');
-      path.setAttribute('stroke-width', '2.5');
-      path.setAttribute('stroke-linecap', 'round');
-      stringSvg.appendChild(path);
       world.appendChild(stringSvg);
-      toys.yarn.stringPath = path;
+      for (const t of Object.values(toys)) {
+        if (!t.def.string) continue;
+        const path = document.createElementNS(NS, 'path');
+        path.setAttribute('fill', 'none');
+        path.setAttribute('stroke', '#3f7f7a');
+        path.setAttribute('stroke-width', '2.5');
+        path.setAttribute('stroke-linecap', 'round');
+        stringSvg.appendChild(path);
+        t.stringPath = path;
+      }
 
       gsap.ticker.add(renderToys);
+      gsap.ticker.add(toyDepth);
 
       G.save.register('toys', {
         get: () => Object.fromEntries(Object.values(toys).map((t) => [t.id, { x: t.x / G.room.W, z: t.z / G.room.H }])),
@@ -585,13 +592,19 @@
       });
 
       G.interaction.register('toy', toyHandler);
-      G.interaction.register('laser', G.interaction.tap(() => laserOn()));
 
       G.bus.on('toy:move', (t) => {
+        if (t.def.chase === false) return;          // pelúcia: o pet não persegue
         if (t.dragging || t.running) startSession({ toy: t });
         else if (G.physics.isIdle() && !G.petState.activity && !G.petState.physical) G.physics.faceTo(t.x);
       });
-      G.bus.on('toy:thrown', ({ toy }) => startSession({ toy }));
+      G.bus.on('toy:thrown', ({ toy }) => { if (toy.def.chase !== false) startSession({ toy }); });
+      // a pelúcia caiu perto dele
+      G.bus.on('toy:rest', (t) => {
+        if (!t.def.plush) return;
+        const P = G.physics.P;
+        if (Math.hypot(t.x - P.x, t.z - P.z) < G.room.petW * 0.9 && U.chance(0.6)) setTimeout(() => G.reactions.plush(t, 'landed'), 300);
+      });
       let lastW = G.room.W, lastH = G.room.H;
       G.bus.on('room:resize', () => {
         const fx = lastW > 50 ? G.room.W / lastW : 1, fz = lastH > 50 ? G.room.H / lastH : 1;
@@ -608,7 +621,7 @@
 
     /** Brincar sozinho: vai até um brinquedo e dá um tapinha */
     async playAlone() {
-      const list = Object.values(toys).filter((t) => !t.dragging && !t.running && !G.room.inFootprint('tub', t.x, t.z, 20));
+      const list = Object.values(toys).filter((t) => t.def.chase !== false && !t.dragging && !t.running && !G.room.inFootprint('tub', t.x, t.z, 20));
       if (!list.length) return false;
       const t = U.pick(list);
       const P = G.physics.P;
@@ -638,9 +651,10 @@
       return best;
     },
 
-    nearestToy(x, z) {
+    nearestToy(x, z, filter) {
       let best = null, bd = Infinity;
       for (const t of Object.values(toys)) {
+        if (filter && !filter(t)) continue;
         const d = Math.hypot(t.x - x, t.z - z);
         if (d < bd) { bd = d; best = t; }
       }
@@ -648,10 +662,10 @@
     },
 
     get toys() { return toys; },
-    get laserOn() { return !!laser; },
-    get laser() { return laser; },
     get session() { return session; },
-    laserOff,
-    endSession
+    endSession,
+    kick,
+    steal,
+    squish
   };
 })(window.Game = window.Game || {});

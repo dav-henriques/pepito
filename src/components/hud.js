@@ -12,7 +12,8 @@
     normal: 'tranquilo', happy: 'feliz', excited: 'animado', playing: 'brincando', playful: 'brincalhão',
     hungry: 'com fome', veryHungry: 'faminto', dirty: 'sujinho', veryDirty: 'muito sujo', clean: 'cheiroso',
     tired: 'cansado', sleeping: 'dormindo', eating: 'comendo', bathing: 'no banho', sad: 'tristinho',
-    sadEmote: 'chateado', grumpy: 'emburrado', dizzy: 'tonto', beingDragged: 'no colo', airborne: 'voando!', beingHeld: 'no colo'
+    sadEmote: 'chateado', grumpy: 'emburrado', dizzy: 'tonto', beingDragged: 'no colo', airborne: 'voando!', beingHeld: 'no colo',
+    angry: 'bravo', sleepy: 'com soninho', confused: 'confuso', staring: 'te encarando', sillyPose: 'fazendo pose', startled: 'assustado'
   };
   const LABELS = { hunger: 'fome', happiness: 'humor', energy: 'energia', cleanliness: 'limpeza' };
   const ICONS = { hunger: 'food', happiness: 'smile', energy: 'bolt', cleanliness: 'drop' };
@@ -47,7 +48,20 @@
       gsap.to(row.querySelector('b'), { scaleX: v[k] / 100, duration: 0.4, ease: 'power2.out' });
       if (debug) row.querySelector('.num').textContent = Math.round(v[k]);
     });
-    panel.querySelector('.mood').textContent = `${G.config.pet.name} está ${MOOD_TEXT[G.petState.display.state] || 'por aí'}`;
+  }
+
+  /* ---------------- estado do pet (linha fixa no topo) ---------------- */
+  let statusEl = null, statusText = '';
+  function updateStatus(instant) {
+    const text = `${G.config.pet.name} está ${MOOD_TEXT[G.petState.display.state] || 'por aí'}`;
+    if (text === statusText) return;
+    statusText = text;
+    gsap.killTweensOf(statusEl);
+    if (instant || U.reducedMotion) { statusEl.textContent = text; gsap.set(statusEl, { opacity: 1, y: 0 }); return; }
+    gsap.timeline()
+      .to(statusEl, { opacity: 0, y: -4, duration: 0.12, ease: 'power1.in' })
+      .add(() => { statusEl.textContent = statusText; })
+      .to(statusEl, { opacity: 1, y: 0, duration: 0.25, ease: 'back.out(2)' });
   }
 
   function togglePanel() {
@@ -66,7 +80,6 @@
       row.appendChild(num);
       panel.appendChild(row);
     }
-    panel.appendChild(U.h('div', { class: 'mood' }));
     btn.parentElement.appendChild(panel);
     panel.style.position = 'absolute';
     gsap.set(panel.querySelectorAll('.meter b'), { scaleX: 0 });
@@ -95,6 +108,56 @@
       if (i <= lv) d.className = 'on';
       dots.appendChild(d);
     }
+    if (statusEl) updateStatus(true);   // nome novo → texto novo
+  }
+
+  /* ---------------- volume (segurar o botão de som) ---------------- */
+  let volPop = null, volTimer = 0;
+
+  function slider(label, value, onInput) {
+    const input = U.h('input', { type: 'range', min: '0', max: '100', step: '1', value: String(Math.round(value * 100)), 'aria-label': label });
+    input.addEventListener('input', () => { onInput(input.value / 100); armVolClose(); });
+    input.addEventListener('change', () => G.audio.play('pop', { v: 0.5 }));
+    return U.h('label', { class: 'vol-row' }, [U.h('span', { text: label }), input]);
+  }
+
+  function armVolClose() {
+    clearTimeout(volTimer);
+    volTimer = setTimeout(closeVolume, 5000);
+  }
+
+  function openVolume(btn) {
+    if (volPop) return closeVolume();
+    closePanel();
+    const lv = G.audio.levels;
+    volPop = U.h('div', { class: 'vol-pop', role: 'dialog', 'aria-label': 'Volume' }, [
+      slider('volume', lv.volume, (v) => G.audio.setVolume(v))
+    ]);
+    const mute = U.h('button', { class: 'vol-mute', text: G.audio.enabled ? 'silenciar tudo' : 'ligar o som' });
+    mute.addEventListener('click', () => {
+      G.audio.setEnabled(!G.audio.enabled);
+      G.hud.syncSound();
+      mute.textContent = G.audio.enabled ? 'silenciar tudo' : 'ligar o som';
+      armVolClose();
+    });
+    volPop.appendChild(mute);
+    btn.parentElement.appendChild(volPop);
+    gsap.fromTo(volPop, { opacity: 0, y: -10, scale: 0.9, rotation: -3 }, { opacity: 1, y: 0, scale: 1, rotation: -1, duration: 0.35, ease: 'back.out(2)' });
+    G.audio.play('pop', { v: 0.5 });
+    armVolClose();
+    setTimeout(() => document.addEventListener('pointerdown', outsideVol, true), 0);
+  }
+
+  function outsideVol(e) {
+    if (volPop && !volPop.contains(e.target) && !e.target.closest('#sound-btn')) closeVolume();
+  }
+
+  function closeVolume() {
+    if (!volPop) return;
+    const p = volPop; volPop = null;
+    clearTimeout(volTimer);
+    document.removeEventListener('pointerdown', outsideVol, true);
+    gsap.to(p, { opacity: 0, y: -8, scale: 0.95, duration: 0.2, ease: 'power2.in', onComplete: () => p.remove() });
   }
 
   function showHint(text, ms = 3800) {
@@ -110,6 +173,7 @@
     init() {
       hintEl = document.getElementById('hint');
       toastEl = document.getElementById('toast');
+      statusEl = document.getElementById('status-line');
       gsap.set(hintEl, { xPercent: -50 });
       gsap.set(toastEl, { xPercent: -50 });
       hintEl.style.transform = toastEl.style.transform = '';
@@ -126,13 +190,28 @@
       const syncSound = () => {
         sb.classList.toggle('muted', !G.audio.enabled);
         sb.querySelector('use').setAttribute('href', G.audio.enabled ? '#i-sound' : '#i-mute');
-        sb.setAttribute('aria-label', G.audio.enabled ? 'Som ligado' : 'Som desligado');
+        sb.setAttribute('aria-label', G.audio.enabled ? 'Som ligado (segure para o volume)' : 'Som desligado');
       };
+      this.syncSound = syncSound;
+      // toque = liga/desliga (como antes) · segurar = volume
+      let lp = 0, longPressed = false;
+      sb.addEventListener('pointerdown', () => {
+        longPressed = false;
+        clearTimeout(lp);
+        lp = setTimeout(() => { longPressed = true; openVolume(sb); }, 480);
+      });
+      const cancelLp = () => clearTimeout(lp);
+      sb.addEventListener('pointerup', cancelLp);
+      sb.addEventListener('pointerleave', cancelLp);
+      sb.addEventListener('pointercancel', cancelLp);
+      sb.addEventListener('contextmenu', (e) => e.preventDefault());
       sb.addEventListener('click', () => {
+        if (longPressed) { longPressed = false; return; }
         G.audio.setEnabled(!G.audio.enabled);
         syncSound();
         gsap.fromTo(sb, { scale: 0.85 }, { scale: 1, duration: 0.4, ease: 'back.out(3)' });
         if (G.audio.enabled) G.audio.play('pop');
+        if (G.audio.enabled) this.hintOnce('volume', 'segure o botão de som para ajustar o volume', 3000);
       });
       syncSound();
 
@@ -143,14 +222,14 @@
         G.audio.play('chime');
         gsap.fromTo('#name-chip', { scale: 1.2 }, { scale: 1, duration: 0.8, ease: 'elastic.out(1, .35)' });
       });
-      G.bus.on('state:display', () => { if (panel) fillPanel(); });
+      G.bus.on('state:display', () => { updateStatus(); if (panel) fillPanel(); });
       updateRings(G.needs.all());
       renderName();
     },
 
     /** Entrada da HUD (GSAP) */
     intro() {
-      gsap.from('.hud > *, .hud-right > *', { y: -30, opacity: 0, duration: 0.6, stagger: 0.08, ease: 'back.out(2)', delay: 0.3 });
+      gsap.from('.hud > *, .hud-right > *, .status-line', { y: -30, opacity: 0, duration: 0.6, stagger: 0.08, ease: 'back.out(2)', delay: 0.3 });
     },
 
     renderName,
@@ -167,6 +246,22 @@
     },
 
     hasSeen(id) { return !!seenHints[id]; },
+
+    /** Etiquetinha de texto perto de um elemento (ex.: nome de um brinquedo) */
+    tag(el, text, ms = 2400) {
+      if (!el || !text) return;
+      const r = G.room.rectOf(el);
+      const t = U.h('div', { class: 'name-tag', text });
+      if (/^\[.*\]$/.test(String(text).trim())) t.classList.add('placeholder');
+      document.getElementById('ui').appendChild(t);
+      const w = t.offsetWidth;
+      const x = U.clamp((r.x0 + r.x1) / 2 - w / 2, 8, G.room.W - w - 8);
+      const y = Math.max(60, r.y0 - t.offsetHeight - 6);
+      gsap.set(t, { x, y, rotation: U.rand(-4, 4) });
+      gsap.timeline({ onComplete: () => t.remove() })
+        .fromTo(t, { scale: 0.4, opacity: 0, y: y + 10 }, { scale: 1, opacity: 1, y, duration: 0.35, ease: 'back.out(2.5)' })
+        .to(t, { opacity: 0, y: y - 8, duration: 0.3, delay: ms / 1000, ease: 'power2.in' });
+    },
 
     closePanel,
 

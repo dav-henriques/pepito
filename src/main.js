@@ -38,6 +38,7 @@
     G.needs.init();
     G.progress.init();
     G.petState.init();
+    G.cutout.init();
     G.physics.init({
       root: petEl,
       rot: petEl.querySelector('.pet-rot'),
@@ -55,9 +56,9 @@
     G.bath.init();
     G.play.init();
     G.reactions.init();
+    G.speech.init();
     G.behavior.init();
     G.objects.init();
-    G.eggs.init();
     G.hud.init();
     G.customize.init();
 
@@ -86,17 +87,17 @@
         const p = G.room.clampFloor(savedPos.x * G.room.W, savedPos.z * G.room.H);
         const inTub = G.room.inFootprint('tub', p.x, p.z, 10);
         G.physics.place(inTub ? G.room.W * 0.5 : p.x, inTub ? (geo.zMin + geo.zMax) / 2 : p.z);
-        if (savedPos.face) G.physics.F.face = savedPos.face * G.config.pet.facing;
+        if (savedPos.face) G.physics.face(savedPos.face, true);
       } else {
         dropIn = true;
-        G.physics.place(G.room.W * 0.5, Z.rug.cz + 6, G.room.H * 0.62);
+        G.physics.place(G.room.W * 0.5, (geo.zMin + geo.zMax) / 2 + 20, G.room.H * 0.62);
       }
     }
 
     // ---------- imagens ----------
     // não segura o jogo esperando todas as imagens: as que faltarem carregam em segundo plano
     await Promise.race([G.anim.preload(), U.wait(2000)]);
-    G.anim.showInitial();
+    await G.anim.showInitial();
     G.physics.render();
     G.save.start();
     G.save.soon(500);
@@ -104,8 +105,10 @@
     // ---------- entrada ----------
     const loader = $('loader');
     gsap.to(loader, { opacity: 0, duration: 0.45, ease: 'power2.out', onComplete: () => loader.remove() });
-    gsap.from('.wall .obj-wall, .shelf, .world .obj:not(.tub-back):not(.bed-front), .rug', {
-      y: -14, opacity: 0, duration: 0.6, stagger: 0.04, ease: 'back.out(2)', delay: 0.05
+    // os móveis "caem" no lugar (as duas camadas de cama/banheira juntas)
+    const order = (el) => (el.classList.contains('bed') ? 0 : el.classList.contains('bowl') ? 1 : 2);
+    gsap.from('.bed, .bowl, .tub-back, .tub-front', {
+      y: -18, opacity: 0, duration: 0.6, ease: 'back.out(2)', delay: 0.05, stagger: (i, el) => order(el) * 0.07
     });
     G.hud.intro();
 
@@ -118,6 +121,7 @@
           G.bubble.show('!', { duration: 1200 });
           G.audio.play('meow');
           G.petState.emote('excited', 1600);
+          setTimeout(() => G.speech.say('hello'), 1500);
         });
       }, 650);
       setTimeout(() => {
@@ -130,6 +134,7 @@
           G.petState.emote('excited', 1800);
           G.bubble.show('love', { duration: 1500 });
           G.audio.play('meow', { pitch: 1.1 });
+          setTimeout(() => G.speech.say('hello'), 2000);
         } else if (Math.random() < 0.5) {
           G.bubble.show(U.pick(['!', 'note']), { duration: 1000 });
         }

@@ -1,9 +1,10 @@
 /* ==========================================================================
    CONFIGURAÇÃO CENTRAL DO PET
    --------------------------------------------------------------------------
-   Quase tudo que define o comportamento do jogo mora aqui. Ajuste valores
-   à vontade: nenhum outro arquivo precisa ser editado para mudar nome,
-   imagens, ritmo das necessidades, física, comidas etc.
+   As REGRAS do jogo moram aqui: ritmo das necessidades, física, comidas,
+   comportamento, brinquedos… Ajuste valores à vontade.
+   • Nome, falas do pet e nomes dos brinquedos → src/config/personal.js
+   • Caminhos de imagens e sons               → src/config/assets.js
    ========================================================================== */
 (function (G) {
   'use strict';
@@ -13,39 +14,23 @@
     /* ----------------------------------------------------------------------
        IDENTIDADE + IMAGENS DO PET
        ----------------------------------------------------------------------
-       >>> COLOQUE SUAS IMAGENS REAIS EM:  assets/pet/
-       Substitua os arquivos mantendo os mesmos nomes (normal.png, happy.png…)
-       ou aponte as chaves abaixo para os seus arquivos.
+       >>> COLOQUE AS FOTOS DO GATO EM:  assets/pet/
+       Os caminhos ficam em src/config/assets.js → pet (registro central).
+       Substitua os arquivos mantendo os mesmos nomes (normal.jpg, happy.jpg…).
 
-       Dicas para as imagens:
-       - PNG com fundo transparente, quadrado (ex.: 400x400 ou 512x512).
-       - O pet deve encostar os "pés" perto da borda de baixo da imagem.
-       - Todas as imagens com o mesmo enquadramento (evita "pulos" ao trocar).
+       Dicas para as fotos (veja também assets/LEIA-ME.md):
+       - JPG quadrado (512×512) vira um "cartão de foto" em pé no chão.
+       - PNG com fundo transparente (gato recortado) vira um adesivo recortado
+         (para isso, troque a extensão do caminho em assets.js).
+       - Não precisa ter o mesmo tamanho nem o mesmo enquadramento: com
+         look.autoFit o jogo iguala o tamanho visual do gato entre as fotos.
        - Não precisa ter todas: se uma faltar, o jogo usa o fallback abaixo.
        ---------------------------------------------------------------------- */
     pet: {
-      name: 'Pepito',
+      name: (G.personal && G.personal.petName) || 'Pepito',
       species: 'gato',
 
-      images: {
-        normal:     'assets/pet/normal.png',
-        happy:      'assets/pet/happy.png',
-        hungry:     'assets/pet/hungry.png',
-        veryHungry: 'assets/pet/very-hungry.png',
-        dirty:      'assets/pet/dirty.png',
-        veryDirty:  'assets/pet/very-dirty.png',
-        clean:      'assets/pet/clean.png',
-        sleeping:   'assets/pet/sleeping.png',
-        eating:     'assets/pet/eating.png',
-        bathing:    'assets/pet/bathing.png',
-        playful:    'assets/pet/playful.png',
-        tired:      'assets/pet/tired.png',
-        excited:    'assets/pet/excited.png',
-        sad:        'assets/pet/sad.png',
-        held:       'assets/pet/held.png',    // sendo carregado / no ar
-        dizzy:      'assets/pet/dizzy.png',   // depois de ser chacoalhado
-        grumpy:     'assets/pet/grumpy.png'   // irritado (muitos cutucões, acordado à força…)
-      },
+      images: G.assets.pet,
 
       // Se a imagem de uma chave não existir/falhar, tenta estas (em ordem).
       imageFallbacks: {
@@ -54,41 +39,73 @@
         clean:      ['happy'],
         playful:    ['excited', 'happy'],
         excited:    ['happy'],
-        held:       ['excited', 'happy'],
-        dizzy:      ['sad'],
-        grumpy:     ['sad'],
-        tired:      ['sleeping', 'sad'],
+        beingHeld:  ['excited', 'happy'],
+        flying:     ['beingHeld', 'excited'],
+        staring:    ['normal'],
+        confused:   ['staring', 'normal'],
+        sillyPose:  ['excited', 'happy'],
+        dizzy:      ['confused', 'sad'],
+        angry:      ['sad'],
+        sleepy:     ['sleeping', 'sad'],
         bathing:    ['clean', 'happy'],
         eating:     ['happy'],
         '*':        ['normal']             // último recurso para qualquer chave
       },
 
+      /* Visual de "recorte de foto" (feito no navegador, sem editar os arquivos).
+         Quando o jogo roda num servidor (ou hospedado), as imagens são
+         processadas num canvas: contorno de adesivo, sombra e tamanho igualado.
+         Abrindo o index.html direto (file://), o navegador não deixa ler os
+         pixels: aí o contorno vem do CSS e o autoFit fica desligado. */
+      look: {
+        process: true,          // processar as imagens no canvas quando possível
+        autoFit: true,          // iguala o tamanho visual do gato entre as fotos
+        targetFill: 0.3461,     // fração da imagem ocupada pelo gato (maior = gato maior)
+        maxUpscale: 1.6,        // limite do autoFit
+        outline: false,         // contorno branco de adesivo (gato, móveis e brinquedos recortados)
+        outlineColor: '#ffffff',
+        outlineWidth: 7,        // px numa imagem de 512
+        outlineEdge: 0.22,      // fiozinho em volta do contorno, 0–1 (aparece no fundo branco; 0 = sem)
+        shadow: true,           // sombra suave grudada no recorte
+        frameOpaque: true,      // foto SEM transparência vira um cartão de foto em pé
+        cardBorder: false,      // borda branca em volta dos cartões de foto
+        cardFill: 0.92          // quanto da caixa do pet o cartão de foto ocupa (0–1)
+      },
+
+      /* Ajuste fino por imagem (aplicado depois do autoFit):
+         scale (1 = igual), x / y (fração da caixa, ex.: 0.05), rotate (graus),
+         flip: true (espelha — útil se numa foto ele olha para o outro lado),
+         fit: false (desliga o autoFit só nessa imagem).
+         Ex.: sleeping: { scale: 0.92, y: 0.02 }  ·  angry: { rotate: -3 }
+         (as fotos ficam retas por padrão: qualquer giro fixo soma com a física) */
+      imageTweaks: {},
+
       // Para qual lado o pet "olha" nas imagens: 1 = direita, -1 = esquerda.
-      // (A imagem é espelhada quando ele anda para o outro lado.)
       facing: 1,
-      flipWhenWalking: true,
+      // Espelhar a imagem quando ele vira para o outro lado?
+      // 'auto' = só gato recortado (PNG transparente); foto nunca espelha.
+      flipWhenWalking: 'auto',
 
       // Tamanho do pet em "unidades do quarto" (1u ≈ 1% da largura do quarto)
-      size: 34,
-      minSizePx: 104,
-      maxSizePx: 176,
+      size: 38,
+      minSizePx: 116,
+      maxSizePx: 196,
 
       // Fração da altura da imagem que fica ABAIXO dos pés (margem transparente).
-      footOffset: 0.012,
+      footOffset: 0.02,
 
-      // Onde ficam cabeça/olhos/pescoço na SUA imagem (frações 0–1 da imagem).
-      // Usado para posicionar acessórios e balões. Ajuste se trocar as imagens.
+      // Onde ficam cabeça/olhos/pescoço na imagem (frações 0–1 da caixa do pet).
+      // Usado para balões, partículas e acessórios. Com cartões de foto, o
+      // cartão ocupa quase a caixa toda: "top" fica logo acima dele.
       anchors: {
-        head: { x: 0.50, y: 0.30 },
-        eyes: { x: 0.50, y: 0.555 },
-        neck: { x: 0.50, y: 0.775 },
-        mouth: { x: 0.50, y: 0.63 },
-        top:  { x: 0.50, y: 0.12 }
+        head: { x: 0.50, y: 0.22 },
+        eyes: { x: 0.50, y: 0.42 },
+        neck: { x: 0.50, y: 0.70 },
+        mouth: { x: 0.50, y: 0.56 },
+        top:  { x: 0.50, y: 0.03 }
       },
-      // Ajuste fino dos anchors por estado (ex.: dormindo a cabeça fica mais baixa)
-      anchorOffsets: {
-        sleeping: { y: 0.06 }
-      }
+      // Ajuste fino dos anchors por estado (ex.: { sleeping: { y: 0.06 } })
+      anchorOffsets: {}
     },
 
     /* ----------------------------------------------------------------------
@@ -139,6 +156,11 @@
       tiltEase: 'outElastic(1, .55)',
       stretchPerSpeed: 0.00011,  // deformação por px/s
       maxStretch: 0.16,
+      // "efeito papel": a foto recortada entorta (skew) quando é arrastada rápido
+      skewPerSpeed: 0.0045,      // graus por px/s
+      maxSkew: 8,
+      dangle: 3.2,               // balanço (graus) quando fica pendurado parado no ar
+      photoDeform: 0.4,          // com FOTO (cartão), entortar/balançar é multiplicado por isto
 
       // Soltar / arremessar
       velocityWindow: 90,        // ms usados para medir a velocidade do dedo
@@ -193,8 +215,42 @@
       // Pesos das ações espontâneas (maior = mais frequente)
       weights: {
         wander: 30, lookAround: 22, sit: 14, stretch: 7, lookAtObject: 12,
-        playAlone: 9, lookAtUser: 6, chaseTail: 2, windowWatch: 6, groomShake: 5, nap: 3
-      }
+        playAlone: 9, lookAtUser: 6, chaseTail: 2, groomShake: 5, nap: 3,
+        // personalidade
+        stare: 5, sillyPose: 3, weirdSit: 5, ignoreToy: 4, chatter: 6, visitPlush: 4
+      },
+      // Tempo mínimo (ms) antes de repetir a mesma ação — evita manias repetitivas
+      cooldowns: {
+        stare: 90000, sillyPose: 150000, weirdSit: 60000, ignoreToy: 70000,
+        chatter: 45000, visitPlush: 80000, chaseTail: 45000, lookAtUser: 30000
+      },
+      startleChance: 0.08,       // chance de um susto exagerado ao ser cutucado
+      startleCooldown: 45000
+    },
+
+    /* ----------------------------------------------------------------------
+       BRINQUEDOS — física de cada um. Nomes e liga/desliga: personal.js → toys
+       kind: o comportamento base. chase: false = o pet não persegue (pelúcia).
+       ---------------------------------------------------------------------- */
+    toys: {
+      // ball:  { asset: 'toys.ball',  size: 10, bounce: 'bounce.out', friction: 1,   roll: true,  sound: 'squeak', weight: 1,   start: { x: 0.46, z: 0.84 } },
+      // yarn:  { asset: 'toys.yarn',  size: 11, bounce: 'bounce.out', friction: 1.6, roll: true,  sound: 'pop',    weight: 1.3, string: true, start: { x: 0.64, z: 0.69 } },
+      mouse: { asset: 'toys.mouse', size: 30, bounce: 'power2.in',  friction: 2.2, roll: false, sound: 'squeak', weight: 0.8, windup: true, heightRatio: 0.62, start: { x: 0.28, z: 0.79 } },
+      // plush: { asset: 'toys.plushie', size: 15, bounce: 'power2.out', friction: 2.8, roll: false, sound: 'squish', weight: 1.8, chase: false, plush: true, start: { x: 0.55, z: 0.71 } },
+      // toy01: { asset: 'toys.toy01', size: 11, bounce: 'bounce.out', friction: 1.3, roll: false, spin: true, sound: 'squeak', weight: 1, start: { x: 0.37, z: 0.91 } },
+      // toy02: { asset: 'toys.toy02', size: 11, bounce: 'bounce.out', friction: 1.2, roll: true,  sound: 'pop',    weight: 1.1, start: { x: 0.7,  z: 0.8 } },
+      // toy03: { asset: 'toys.toy03', size: 11, bounce: 'power2.in',  friction: 2,   roll: false, spin: true, sound: 'squeak', weight: 0.9, start: { x: 0.2,  z: 0.88 } }
+    },
+
+    /* ----------------------------------------------------------------------
+       MÓVEIS DO CHÃO — ajuste quando trocar as imagens
+       frontClip: a partir de que altura (0–1, de cima para baixo) a imagem
+       fica NA FRENTE do pet (ex.: a borda da cama, a lateral da banheira).
+       ---------------------------------------------------------------------- */
+    furniture: {
+      bed:     { frontClip: 0.8 },
+      bathtub: { frontClip: 0.39, water: { top: 0.285, left: 0.07, right: 0.07, height: 0.17 } },
+      bowl:    { food: { left: 0.17, top: -0.36, width: 0.66, height: 0.66 } }  // onde a comida aparece
     },
 
     /* ----------------------------------------------------------------------
@@ -203,7 +259,10 @@
     foods: {
       kibble:  { label: 'ração',    asset: 'kibble',  hunger: 34, happiness: 4,  energy: 3,  eatTime: 3.4, xp: 3 },
       treat:   { label: 'petisco',  asset: 'treat',   hunger: 10, happiness: 12, energy: 4,  eatTime: 1.6, xp: 2, alwaysWanted: true },
-      special: { label: 'especial', asset: 'special', hunger: 52, happiness: 20, energy: 10, eatTime: 4.4, xp: 6, sleepyChance: 0.35 }
+      special: { label: 'especial', asset: 'special', hunger: 52, happiness: 20, energy: 10, eatTime: 4.4, xp: 6, sleepyChance: 0.35 },
+      // comida personalizada: o nome vem de personal.js → foods.food01
+      food01:  { label: (G.personal && G.personal.foods && G.personal.foods.food01 && G.personal.foods.food01.name) || 'favorita',
+                 asset: 'food01', hunger: 40, happiness: 24, energy: 6, eatTime: 3, xp: 5, alwaysWanted: true, favorite: true }
     },
     fullThreshold: 92,           // acima disso ele recusa comida (menos petiscos)
 
@@ -231,7 +290,6 @@
       cleanlinessPerCatch: 0.6,
       xpPerCatch: 1,
       restAfter: 2600,           // ms parado até a brincadeira acabar
-      laserDuration: 26000,
       minEnergyToPlay: 16
     },
 
@@ -280,29 +338,17 @@
         { id: 'glasses',  label: 'óculos',   level: 2, anchor: 'eyes', width: 0.48, dy: 0 },
         { id: 'partyHat', label: 'festa',    level: 3, anchor: 'head', width: 0.2,  dx: -0.12, dy: -0.11, rotate: -14 },
         { id: 'crown',    label: 'flores',   level: 4, anchor: 'head', width: 0.56, dy: -0.04 }
-      ],
-      walls: [
-        { id: 'sage',   label: 'sálvia',  level: 0, base: '#93b5a4', stripe: '#a1c0b0' },
-        { id: 'butter', label: 'manteiga', level: 0, base: '#e8d3a2', stripe: '#efdcb0' },
-        { id: 'sky',    label: 'céu',     level: 1, base: '#9cbdd0', stripe: '#aac8d8' },
-        { id: 'clay',   label: 'argila',  level: 2, base: '#d9a58a', stripe: '#e1b197' },
-        { id: 'lilac',  label: 'lilás',   level: 3, base: '#b4a8c9', stripe: '#bfb4d2' },
-        { id: 'night',  label: 'noturno', level: 5, base: '#4f5d7a', stripe: '#586783' }
-      ],
-      rugs: [
-        { id: 'sun',   label: 'sol',     level: 0, asset: 'rugSun' },
-        { id: 'wave',  label: 'ondas',   level: 1, asset: 'rugWave' },
-        { id: 'check', label: 'xadrez',  level: 2, asset: 'rugCheck' }
       ]
     },
 
     /* ----------------------------------------------------------------------
-       SOM (sintetizado, sem arquivos)
+       SOM — efeitos sintetizados (WebAudio) + arquivos opcionais (assets.js)
+       volume é o máximo; o jogador ajusta pelos controles
+       (segure o botão de som, ou no caderninho).
        ---------------------------------------------------------------------- */
     audio: {
       enabledByDefault: true,
-      volume: 0.55,
-      musicVolume: 0.32
+      volume: 0.55
     },
 
     /* ----------------------------------------------------------------------

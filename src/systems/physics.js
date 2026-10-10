@@ -21,6 +21,10 @@
                        (com perda de energia) dentro do onUpdate.
    • mola/damping .... spring({ stiffness, damping, velocity }) para voltar à
                        posição neutra, com a velocidade angular herdada.
+   • efeito papel .... skewX via createAnimatable: a foto recortada "entorta"
+                       ao ser arrastada rápido e volta com spring() ao soltar.
+   • pendurado ....... parado no ar por um instante → balanço de pêndulo
+                       (animate em loop), cancelado assim que o dedo mexe.
 
    Coordenadas (2.5D):  x = horizontal, z = profundidade no chão (y da sombra),
    h = altura acima do chão.  Na tela: y = z − h.
@@ -35,7 +39,7 @@
 
   /* ---------- estado animado pelo Anime.js ---------- */
   const P = { x: 0, z: 0, h: 0 };          // posição
-  const D = { rot: 0, sx: 1, sy: 1 };      // corpo (rotação / squash-stretch)
+  const D = { rot: 0, sx: 1, sy: 1, sk: 0 }; // corpo (rotação / squash-stretch / skew "papel")
   const F = { face: 1 };                   // espelhamento (virar)
   const POSE = { x: 1, y: 1 };             // pose: sentado, deitado…
   const E = { rot: 0, sx: 1, sy: 1 };      // efeitos extras: ronronar, dançar
@@ -53,6 +57,19 @@
   let last = {};
   let rotHistory = [];
   let zOverride = null;                    // z-index forçado (ex.: sendo carregado)
+  let heading = 1;                         // para que lado ele está virado (1 = direita)
+
+  /** A imagem atual é uma foto (cartão)? Fotos não espelham e entortam menos. */
+  const isPhoto = () => !!(G.anim && G.anim.isCard);
+  const photoK = () => (isPhoto() ? (C().photoDeform ?? 0.4) : 1);
+  /** Ponto de giro "em repouso" (fração da caixa): foto gira pelo centro do cartão;
+      gato recortado, um pouco abaixo do meio (onde fica o corpo) */
+  const restPivot = () => (isPhoto() ? { x: 0.5, y: 0.5 } : { x: 0.5, y: 0.55 });
+  /** Pode espelhar a imagem ao virar? (true | false | 'auto' = só recortes, nunca fotos) */
+  function canMirror() {
+    const f = G.config.pet.flipWhenWalking;
+    return f === true || (f === 'auto' && !isPhoto());
+  }
 
   /* ======================================================================
      RENDER — uma única escrita de transform por camada, só se mudou
@@ -70,7 +87,7 @@
     const rotT = `rotate(${(D.rot + E.rot).toFixed(2)}deg)`;
     if (rotT !== last.rot) { els.rot.style.transform = rotT; last.rot = rotT; }
 
-    const sqT = `scale(${(D.sx * POSE.x * E.sx).toFixed(4)},${(D.sy * POSE.y * E.sy).toFixed(4)})`;
+    const sqT = `scale(${(D.sx * POSE.x * E.sx).toFixed(4)},${(D.sy * POSE.y * E.sy).toFixed(4)}) skewX(${D.sk.toFixed(2)}deg)`;
     if (sqT !== last.sq) { els.squash.style.transform = sqT; last.sq = sqT; }
 
     const fT = `scaleX(${F.face.toFixed(3)})`;
@@ -217,6 +234,13 @@
     });
   }
 
+  /** Skew "papel" volta para 0 com mola */
+  function skewSettle(kick = 0) {
+    const base = C().settleSpring;
+    if (kick) animate(D, { sk: [{ to: kick, duration: 70, ease: 'out(2)' }, { to: 0, ease: spring(base) }] });
+    else if (Math.abs(D.sk) > 0.15) animate(D, { sk: 0, ease: spring(base) });
+  }
+
   function wallImpact(axis, speed, side) {
     const k = K();
     if (speed < 80) return;
@@ -224,6 +248,7 @@
     if (axis === 'x') {
       jelly(1 - q, 1 + q * 0.7);
       rotSpringTo(0, -side * speed * 0.12);
+      skewSettle(U.clamp(side * q * 45, -C().maxSkew, C().maxSkew) * photoK());
     } else {
       jelly(1 + q * 0.6, 1 - q * 0.6);
     }
@@ -402,7 +427,7 @@
      ====================================================================== */
   function frame() {
     const now = U.now();
-    if (mode === 'drag' && drag) dragDynamics(now);
+    if (mode === 'drag' && drag) { dragDynamics(now); dangleCheck(now); }
     if (mode === 'drag' || mode === 'air') {
       rotHistory.push({ t: now, r: D.rot });
       while (rotHistory.length > 2 && now - rotHistory[0].t > 70) rotHistory.shift();
@@ -433,6 +458,15 @@
       drag.lastSx = sx; drag.lastSy = sy;
     }
 
+    // efeito papel: segurando pela cabeça, a parte de baixo "fica para trás";
+    // segurando pelos pés, é o contrário
+    const grip = U.clamp((0.6 - rotOrigin.y) * 2.5, -1, 1);
+    const skT = U.clamp(-v.x * c.skewPerSpeed * k * grip, -c.maxSkew, c.maxSkew) * photoK();
+    if (Math.abs(skT - drag.lastSk) > 0.25) {
+      tilt.sk(skT);
+      drag.lastSk = skT;
+    }
+
     // chacoalhar = muitas inversões rápidas de direção
     if (Math.abs(v.x) > c.shakeSpeed) {
       const dir = Math.sign(v.x);
@@ -448,6 +482,36 @@
       drag.shakes++;
       G.bus.emit('physics:shake', { count: drag.shakes });
     }
+  }
+
+  /** Parado no ar → balança como um pêndulo; mexeu o dedo → para */
+  function dangleCheck(now) {
+    const sp = Math.hypot(drag.v.x, drag.v.y);
+    if (sp > 90) {
+      drag.stillSince = now;
+      if (drag.dangle) stopDangle();
+      return;
+    }
+    if (!drag.stillSince) drag.stillSince = now;
+    if (!drag.dangle && now - drag.stillSince > 420 && P.h > 10 && !U.reducedMotion) {
+      const a = C().dangle * K() * photoK();
+      utils.remove(E, null, 'rot');
+      drag.dangle = animate(E, {
+        rot: [
+          { to: a, duration: 620, ease: 'inOut(2)' },
+          { to: -a, duration: 1240, ease: 'inOut(2)' },
+          { to: 0, duration: 620, ease: 'inOut(2)' }
+        ],
+        loop: true
+      });
+    }
+  }
+
+  function stopDangle() {
+    if (!drag || !drag.dangle) return;
+    drag.dangle.pause();
+    drag.dangle = null;
+    animate(E, { rot: 0, duration: 220, ease: 'out(2)' });
   }
 
   /* ======================================================================
@@ -486,7 +550,7 @@
     get mode() { return mode; },
     isIdle() { return mode === 'idle'; },
     isBusy() { return mode !== 'idle'; },
-    get facing() { return Math.sign(F.face) * G.config.pet.facing || 1; },
+    get facing() { return heading; },
     get size() { return { w: W, h: H }; },
 
     /** Posição atual (cópia) */
@@ -502,7 +566,7 @@
     place(x, z, h = 0) {
       stopMotions({ body: true });
       P.x = x; P.z = z; P.h = h;
-      D.rot = 0; D.sx = 1; D.sy = 1;
+      D.rot = 0; D.sx = 1; D.sy = 1; D.sk = 0;
       mode = 'idle';
       render();
     },
@@ -523,27 +587,29 @@
       if (follow) { for (const k in follow.animations) follow.animations[k].pause(); follow = null; }
       mode = 'held';
 
-      // ponto local onde o dedo segurou (fração da caixa)
+      // ponto local onde o dedo segurou (fração da caixa): gira em volta do dedo
       const s = G.room.depthScale(P.z);
       const footY = H * G.config.pet.footOffset;
       const lx = W / 2 + (pt.x - P.x) / s;
       const ly = H + (pt.y - (P.z - P.h + footY)) / s;
-      setRotOrigin(U.clamp(lx / W, 0.2, 0.8), U.clamp(ly / H, 0.15, 0.85));
+      setRotOrigin(U.clamp(lx / W, 0.05, 0.95), U.clamp(ly / H, 0.05, 0.95));
 
       drag = {
         offX: pt.x - P.x,
         offY: pt.y - (P.z - P.h),
         samples: [{ x: pt.x, y: pt.y, t: U.now() }],
-        lastTilt: D.rot, lastSx: 1, lastSy: 1,
+        lastTilt: D.rot, lastSx: 1, lastSy: 1, lastSk: D.sk,
         reversals: [], dir: 0, shakeCooldown: 0, shakes: 0,
-        impactUntil: 0, outside: false, v: { x: 0, y: 0 }
+        impactUntil: 0, outside: false, v: { x: 0, y: 0 },
+        stillSince: 0, dangle: null
       };
 
-      // animatable do corpo: inclinação elástica + squash
+      // animatable do corpo: inclinação elástica + squash + skew "papel"
       tilt = createAnimatable(D, {
         rot: { duration: c.tiltLag, ease: c.tiltEase },
         sx: { duration: 150, ease: 'out(3)' },
-        sy: { duration: 150, ease: 'out(3)' }
+        sy: { duration: 150, ease: 'out(3)' },
+        sk: { duration: 300, ease: 'outElastic(1, .5)' }
       });
       // "apertar": pequena mudança de escala ao segurar
       tilt.sx(1.07); tilt.sy(0.92);
@@ -613,12 +679,15 @@
       const shakes = drag.shakes;
 
       // encerra os animatables do gesto
+      stopDangle();
       if (follow) { for (const key in follow.animations) follow.animations[key].pause(); follow = null; }
       if (tilt) { for (const key in tilt.animations) tilt.animations[key].pause(); tilt = null; }
       utils.remove(P); utils.remove(D);
       drag = null;
       zOverride = null;
-      setRotOrigin(0.5, 0.55);
+      const rp = restPivot();
+      setRotOrigin(rp.x, rp.y);
+      skewSettle();
 
       if (!wasDragging) {
         // só pressionou: volta ao normal com geleca
@@ -759,17 +828,42 @@
       const dir = x >= P.x ? 1 : -1;
       this.face(dir);
     },
-    face(dir) {
-      if (!G.config.pet.flipWhenWalking) return;
-      const target = dir * G.config.pet.facing;
+
+    /** Vira para um lado. O lado é sempre guardado (a lógica do jogo usa);
+        a imagem só é espelhada quando pode — foto nunca espelha. */
+    face(dir, instant) {
+      const prev = heading;
+      heading = dir < 0 ? -1 : 1;
+      if (!canMirror()) {
+        // foto: não espelha; ao mudar de lado só dá uma "piscada" de largura
+        if (!instant && prev !== heading && F.face === 1) {
+          animate(F, { face: [{ to: 0.9, duration: 90, ease: 'out(2)' }, { to: 1, duration: 170, ease: 'out(2)' }] });
+        } else this.straighten();
+        return;
+      }
+      const target = heading * G.config.pet.facing;
+      if (instant) { utils.remove(F); F.face = target; render(); return; }
       if (Math.sign(F.face) === target && Math.abs(F.face) > 0.99) return;
       animate(F, { face: target, duration: 230, ease: 'inOut(2)' });
+    },
+
+    /** Desfaz qualquer espelhamento (ex.: trocou para uma foto) */
+    straighten() {
+      if (F.face > 0.85) return;   // já está reto (ou só na "piscada")
+      utils.remove(F);
+      animate(F, { face: 1, duration: 160, ease: 'out(2)' });
     },
 
     /** Balancinho rotacional (cutucão, susto) */
     wobble(amount = 10, base) {
       const b = base || { mass: 1, stiffness: 260, damping: 7 };
       animate(D, { rot: [{ to: D.rot + amount, duration: 80, ease: 'out(2)' }, { to: 0, ease: spring(b) }] });
+    },
+
+    /** Inclina o corpo e fica assim (sentar torto). lean(0) volta com mola. */
+    lean(angle = 0) {
+      if (!angle) { rotSpringTo(0, 0); return; }
+      animate(D, { rot: angle * K(), ease: spring(C().poseSpring) });
     },
 
     /** Squash rápido com geleca */
@@ -787,7 +881,7 @@
         animate(D, {
           sx: [{ to: 1.24, duration: 520, ease: 'inOut(2)' }, { to: 1.24, duration: 500 }, { to: 1, ease: spring({ mass: 1, stiffness: 180, damping: 8 }) }],
           sy: [{ to: 0.8, duration: 520, ease: 'inOut(2)' }, { to: 0.8, duration: 500 }, { to: 1, ease: spring({ mass: 1, stiffness: 180, damping: 8 }) }],
-          rot: [{ to: F.face * 4, duration: 520 }, { to: 0, duration: 400 }],
+          rot: [{ to: heading * 4 * photoK(), duration: 520 }, { to: 0, duration: 400 }],
           onComplete: () => resolve(true)
         });
       });

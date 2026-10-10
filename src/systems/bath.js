@@ -269,8 +269,9 @@
 
   G.bath = {
     init() {
-      tubEl = document.querySelector('.tub-front');
-      waterEl = tubEl.querySelector('.tub-water');
+      // a banheira é uma imagem só, usada em duas camadas (atrás e na frente do pet)
+      tubEl = document.querySelectorAll('.tub-back, .tub-front');
+      waterEl = document.querySelector('.tub-water');
       foamLayer = G.anim.foamLayer;
       gsap.set(waterEl, { scaleY: 0, opacity: 0 });
 

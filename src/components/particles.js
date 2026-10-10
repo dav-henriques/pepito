@@ -40,7 +40,7 @@
     sparkle: {
       make: (el) => { el.className = 'p'; el.appendChild(svgIcon('sparkle')); },
       size: () => U.rand(14, 24),
-      color: () => U.pick(['#ffe08a', '#fff4c2', '#ffffff', '#ffd35c']),
+      color: () => U.pick(['#ffc93c', '#ffb12b', '#f2a93b', '#ffd35c']),
       play(el, x, y, o, done) {
         const a = U.rand(0, Math.PI * 2), r = U.rand(16, 46) * (o.spread || 1);
         gsap.set(el, { x, y, scale: 0, opacity: 1, rotation: U.rand(-40, 40) });
@@ -52,7 +52,7 @@
     star: {
       make: (el) => { el.className = 'p'; el.appendChild(svgIcon('star')); },
       size: () => U.rand(12, 20),
-      color: () => U.pick(['#ffd35c', '#ffe08a', '#fff4c2']),
+      color: () => U.pick(['#ffc93c', '#ffb12b', '#f5a524']),
       play(el, x, y, o, done) {
         const a = o.angle ?? U.rand(-Math.PI, 0), r = U.rand(30, 60);
         gsap.set(el, { x, y, scale: 0.4, opacity: 1, rotation: 0 });
@@ -64,7 +64,7 @@
     dust: {
       make: (el) => { el.className = 'p p-dot'; },
       size: () => U.rand(10, 18),
-      color: () => 'rgba(235, 220, 200, 0.85)',
+      color: () => 'rgba(140, 128, 115, 0.38)',
       play(el, x, y, o, done) {
         const dir = o.dir ?? U.sign(U.rand(-1, 1));
         gsap.set(el, { x, y, scale: 0.4, opacity: 0.9 });
@@ -144,9 +144,40 @@
       color: () => null,
       play(el, x, y, o, done) {
         el.style.background = 'transparent';
-        el.style.border = '3px solid ' + (o.color || 'rgba(255,250,242,.9)');
+        el.style.border = '3px solid ' + (o.color || 'rgba(43, 42, 51, 0.3)');
         gsap.set(el, { x, y, scale: 0.3, opacity: 0.9 });
         gsap.to(el, { scale: o.scale || 1.8, opacity: 0, duration: 0.55, ease: 'power2.out', onComplete: done });
+      }
+    },
+
+    /* estrela de impacto estilo HQ (pancada forte, susto) */
+    impact: {
+      make: (el) => {
+        el.className = 'p p-impact';
+        el.innerHTML = '<svg viewBox="0 0 100 100"><path d="M50 2 61 30 92 14 74 42 98 54 68 62 80 94 52 74 30 98 32 68 2 70 26 50 6 26 36 32Z" fill="#fffaf2" stroke="#2b2a33" stroke-width="5" stroke-linejoin="round"/></svg>';
+      },
+      size: () => 72,
+      color: () => null,
+      play(el, x, y, o, done) {
+        gsap.set(el, { x, y, scale: 0.2, opacity: 1, rotation: U.rand(-30, 30) });
+        gsap.to(el, { scale: 1, duration: 0.12, ease: 'back.out(3)' });
+        gsap.to(el, { scale: 1.25, opacity: 0, duration: 0.25, delay: 0.14, ease: 'power2.in', onComplete: done });
+      }
+    },
+
+    /* confete de papel picado */
+    confetti: {
+      make: (el) => { el.className = 'p p-confetti'; },
+      size: () => U.rand(7, 12),
+      color: () => U.pick(['#d8694a', '#e9b44c', '#3f7f7a', '#2f3d55', '#4c8fb0']),
+      play(el, x, y, o, done) {
+        const vx = U.rand(-260, 260), up = U.rand(140, 320), t = U.rand(1.1, 1.7);
+        el.style.background = el.style.color;
+        gsap.set(el, { x, y, opacity: 1, rotation: U.rand(0, 360), scaleY: U.rand(0.4, 1) });
+        gsap.to(el, { x: x + vx * t * 0.6, duration: t, ease: 'power1.out' });
+        gsap.to(el, { keyframes: [{ y: y - up, duration: t * 0.3, ease: 'power2.out' }, { y: y - up + 260, duration: t * 0.7, ease: 'power1.in' }] });
+        gsap.to(el, { rotation: '+=' + U.rand(360, 900), rotationX: U.rand(180, 720), duration: t, ease: 'none' });
+        gsap.to(el, { opacity: 0, duration: 0.3, delay: t - 0.3, onComplete: done });
       }
     },
 
@@ -214,6 +245,22 @@
         if (d) setTimeout(() => this.spawn(type, x + U.rand(-(opts.jitter || 0), opts.jitter || 0), y, opts), d * 1000);
         else this.spawn(type, x + U.rand(-(opts.jitter || 0), opts.jitter || 0), y + U.rand(-(opts.jitterY || 0), opts.jitterY || 0), opts);
       }
+    },
+
+    /** Flash de câmera no quarto inteiro (pose absurda) */
+    flash(strength = 0.9) {
+      const el = document.getElementById('flash');
+      if (!el || U.reducedMotion) return;
+      gsap.killTweensOf(el);
+      gsap.fromTo(el, { opacity: strength }, { opacity: 0, duration: 0.55, ease: 'power2.out' });
+      G.audio?.play('shutter');
+      G.bus.emit('fx:flash');
+    },
+
+    /** Confete saindo de um ponto */
+    confetti(x, y, n = 26) {
+      this.burst('confetti', x, y, n, { jitter: 16 });
+      G.audio?.play('tada');
     },
 
     /** Estoura uma bolha tocada pelo usuário */

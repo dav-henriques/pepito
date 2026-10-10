@@ -12,7 +12,7 @@
   const U = G.util;
 
   const handlers = {};
-  let override = null;       // ex.: modo laser / banho capturam o toque
+  let override = null;       // ex.: modo banho captura o toque
   let active = null;
   let roomEl = null;
   let lastActivity = Date.now();
@@ -32,7 +32,7 @@
     if (active) return;                          // ignora o segundo dedo
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const t = e.target;
-    if (t.closest('.hud, .food-menu, .bath-tool, .sheet, .sheet-backdrop, .needs-panel')) return;
+    if (t.closest('.hud, .food-menu, .bath-tool, .sheet, .sheet-backdrop, .needs-panel, .vol-pop')) return;
 
     const pt = local(e);
     lastActivity = Date.now();
@@ -162,7 +162,7 @@
       roomEl.addEventListener('contextmenu', (e) => e.preventDefault());
       // impede gestos de zoom/scroll do navegador dentro do jogo (iOS)
       document.addEventListener('gesturestart', (e) => e.preventDefault());
-      document.addEventListener('touchmove', (e) => { if (!e.target.closest('.sheet')) e.preventDefault(); }, { passive: false });
+      document.addEventListener('touchmove', (e) => { if (!e.target.closest('.sheet, .vol-pop, input[type="range"]')) e.preventDefault(); }, { passive: false });
 
       this.register('pet', petHandler);
       this.register('room', roomHandler);
@@ -185,7 +185,7 @@
 
     register(kind, handler) { handlers[kind] = handler; },
 
-    /** Captura temporária de todos os toques (laser, banho…) */
+    /** Captura temporária de todos os toques (banho…) */
     setOverride(h) { override = h; },
     clearOverride(h) { if (!h || override === h) override = null; },
 

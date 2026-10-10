@@ -2,7 +2,7 @@
    COMPORTAMENTO AUTÔNOMO — o "cérebro"
    O pet não fica parado esperando: de tempos em tempos escolhe uma ação
    (pesos no petConfig.behavior.weights), reage às necessidades, dorme,
-   pede comida, olha a janela, dança com o rádio…
+   pede comida, te encara, faz poses absurdas, despreza brinquedos…
    Ação nova: crie uma função em ACTIONS e dê um peso no config.
    ========================================================================== */
 (function (G) {
@@ -13,10 +13,11 @@
   let nextIdleAt = Date.now() + 3500;
   let pauseUntil = 0;
   let sleepInfo = null;
-  let dancing = false;
+  let staring = false;
   let lastBeg = 0;
   let lastPatience = 0;
   let lastNeedHint = 0;
+  const lastRun = {};          // ação → quando rodou (cooldowns)
 
   const ps = () => G.petState;
   const phys = () => G.physics;
@@ -31,8 +32,14 @@
     finally { busy = false; }
   }
 
+  /** Pode começar uma ação nova? */
   function free() {
-    return !busy && ps().can('autonomous') && !G.bath.active && !G.interaction.isActive;
+    return !busy && still();
+  }
+
+  /** Dentro de uma ação: ninguém interrompeu? (pegaram no colo, banho, toque…) */
+  function still() {
+    return ps().can('autonomous') && !G.bath.active && !G.interaction.isActive;
   }
 
   function scheduleIdle(mult = 1) {
@@ -48,7 +55,7 @@
       const span = G.room.W * 0.45;
       const p = G.room.randomFloorPoint({ x0: Math.max(G.room.geo.minX, P.x - span), x1: Math.min(G.room.geo.maxX, P.x + span) });
       const ok = await phys().walkTo(p.x, p.z, { run: ps().condition === 'playful' && U.chance(0.3) });
-      if (ok && U.chance(0.35)) { phys().setPose('sit'); await U.wait(U.rand(1800, 3800)); if (free()) phys().setPose('stand'); }
+      if (ok && U.chance(0.35)) { phys().setPose('sit'); await U.wait(U.rand(1800, 3800)); if (still()) phys().setPose('stand'); }
       return ok;
     },
 
@@ -56,10 +63,10 @@
       const f = phys().facing;
       phys().face(-f);
       await U.wait(U.rand(700, 1300));
-      if (!free()) return false;
+      if (!still()) return false;
       phys().wobble(U.rand(-5, 5));
       await U.wait(U.rand(500, 1000));
-      if (!free()) return false;
+      if (!still()) return false;
       phys().face(f);
       return true;
     },
@@ -67,7 +74,7 @@
     async sit() {
       phys().setPose(U.chance(0.3) ? 'loaf' : 'sit');
       await U.wait(U.rand(3000, 7000));
-      if (free()) phys().setPose('stand');
+      if (still()) phys().setPose('stand');
       return true;
     },
 
@@ -81,8 +88,8 @@
       const Z = G.room.zones;
       const toys = Object.values(G.play.toys);
       const targets = [
-        { x: Z.window.cx, tag: 'window' }, { x: Z.radio.cx, tag: 'radio' }, { x: Z.plant.cx, tag: 'plant' },
-        { x: Z.lamp.cx, tag: 'lamp' }, ...toys.map((t) => ({ x: t.x, tag: 'toy' }))
+        { x: Z.bed.cx, tag: 'bed' }, { x: Z.bowl.cx, tag: 'bowl' }, { x: Z.tub.cx, tag: 'tub' },
+        ...toys.map((t) => ({ x: t.x, tag: 'toy' }))
       ];
       const t = U.pick(targets);
       phys().faceTo(t.x);
@@ -109,7 +116,7 @@
       G.bubble.show(U.pick(['note', '!', 'love', 'dots']), { duration: 1300 });
       if (U.chance(0.5)) G.audio.play('meow');
       await U.wait(2400);
-      if (free()) phys().setPose('stand');
+      if (still()) phys().setPose('stand');
       return true;
     },
 
@@ -124,8 +131,6 @@
       return true;
     },
 
-    async windowWatch() { return lookAtWindow(); },
-
     async groomShake() {
       phys().wobble(6);
       await U.wait(300);
@@ -138,9 +143,92 @@
       return sleepNow({ nap: true });
     },
 
-    async dance() {
-      if (!G.objects.radioOn) return false;
-      return goDance();
+    /* ---------------- personalidade ---------------- */
+
+    /** vem até a frente, senta e fica te encarando… sem motivo nenhum */
+    async stare() {
+      const geo = G.room.geo;
+      const p = G.room.randomFloorPoint({ x0: G.room.W * 0.3, x1: G.room.W * 0.7, z0: geo.zMax - 34, z1: geo.zMax - 4 });
+      if (!(await phys().walkTo(p.x, p.z))) return false;
+      if (!still()) return false;
+      phys().face(U.pick([-1, 1]));
+      phys().setPose('sit');
+      staring = true;
+      ps().emote('staring', 12000);
+      G.bus.emit('behavior:stare');
+      await U.wait(U.rand(1800, 2600));
+      if (!staring) return true;
+      G.speech.maybe('staring', 0.5);
+      await U.wait(U.rand(3000, 4800));
+      if (!staring) return true;
+      staring = false;
+      if (ps().emotion === 'staring') ps().clearEmotion();
+      phys().wobble(U.pick([-7, 7]));
+      if (U.chance(0.4)) G.bubble.show(U.pick(['?', 'dots']), { duration: 900 });
+      await U.wait(500);
+      if (still()) phys().setPose('stand');
+      return true;
+    },
+
+    /** trava numa pose absurda (às vezes alguém tira foto) */
+    async sillyPose() {
+      if (G.needs.get('energy') < 25) return false;
+      phys().setPose(U.pick(['lie', 'tall', 'chubby']));
+      if (U.chance(0.5)) phys().lean(U.pick([-1, 1]) * U.rand(8, 16));
+      ps().emote('sillyPose', U.rand(4200, 5600));
+      G.bus.emit('behavior:sillyPose');
+      if (U.chance(0.45)) { await U.wait(900); if (!still()) return false; G.fx.flash(0.75); G.anim.flash(); }
+      G.speech.maybe('sillyPose', 0.5);
+      await U.wait(U.rand(3200, 4400));
+      if (!still()) return false;
+      phys().lean(0);
+      phys().setPose('stand');
+      return true;
+    },
+
+    /** senta torto e fica assim, como se fosse normal */
+    async weirdSit() {
+      phys().setPose(U.pick(['loaf', 'sit']));
+      phys().lean(U.pick([-1, 1]) * U.rand(11, 17));
+      await U.wait(U.rand(2800, 4800));
+      if (!still()) return false;
+      phys().lean(0);
+      phys().setPose('stand');
+      return true;
+    },
+
+    /** vai até um brinquedo, prepara o bote… e desiste com desprezo */
+    async ignoreToy() {
+      const list = Object.values(G.play.toys).filter((t) => t.def.chase !== false && !t.dragging && !t.running && !G.room.inFootprint('tub', t.x, t.z, 20));
+      if (!list.length) return false;
+      const t = U.pick(list);
+      const side = Math.sign(phys().P.x - t.x) || 1;
+      if (!(await phys().walkTo(t.x + side * G.room.petW * 0.45, t.z))) return false;
+      phys().faceTo(t.x);
+      phys().setPose('crouch');
+      await U.wait(U.rand(800, 1300));
+      if (!still()) return false;
+      phys().setPose('tall');
+      phys().face(side);
+      phys().hop(6);
+      G.bubble.show('dots', { duration: 1100 });
+      G.speech.maybe('ignoreToy', 0.5);
+      G.bus.emit('behavior:ignoreToy', { toy: t.id });
+      await U.wait(1500);
+      if (still()) phys().setPose('stand');
+      return true;
+    },
+
+    /** vai lá ver a pelúcia */
+    async visitPlush() {
+      const t = G.play.toys.plush;
+      if (!t || t.dragging || t.running) return false;
+      return G.reactions.plush(t, 'visit');
+    },
+
+    /** fala uma das frases internas */
+    async chatter() {
+      return G.speech.say('idle');
     }
   };
 
@@ -218,40 +306,6 @@
   /* ======================================================================
      OUTROS
      ====================================================================== */
-  async function lookAtWindow() {
-    const Z = G.room.zones;
-    const geo = G.room.geo;
-    const ok = await phys().walkTo(U.clamp(Z.window.cx + U.rand(-30, 30), geo.minX, geo.maxX), geo.zMin + 10);
-    if (!ok) return false;
-    phys().setPose('tall');
-    phys().wobble(-4);
-    await U.wait(600);
-    const night = G.time.isNight();
-    G.bubble.show(night ? U.pick(['moon', 'star', 'sparkle']) : U.pick(['sparkle', '?', 'note']), { duration: 1400 });
-    await U.wait(U.rand(2200, 3600));
-    if (free() || phys().isIdle()) phys().setPose('stand');
-    G.bus.emit('behavior:window', { night });
-    return true;
-  }
-
-  async function goDance() {
-    const Z = G.room.zones;
-    const geo = G.room.geo;
-    const x = U.clamp(Z.radio.cx + U.rand(-40, 20), geo.minX, geo.maxX);
-    const ok = await phys().walkTo(x, geo.zMin + U.rand(14, 40));
-    if (!ok) return false;
-    startDancing();
-    return true;
-  }
-
-  function startDancing() {
-    if (!G.objects.radioOn) return;
-    dancing = true;
-    phys().setPose('stand');
-    G.bubble.show('notes', { duration: 1300 });
-    G.bus.emit('behavior:dance');
-  }
-
   async function beg() {
     lastBeg = Date.now();
     const s = G.food.eatSpot();
@@ -302,16 +356,9 @@
     const n = G.needs.all();
     const th = G.config.needs.thresholds;
 
-    // dançando? continua até o rádio desligar
-    if (dancing) {
-      if (!G.objects.radioOn) dancing = false;
-      else if (U.chance(0.012)) { dancing = false; } // cansou de dançar
-      else return;
-    }
-
     // energia acabou → dorme onde estiver
     if (n.energy < th.exhausted) { run(() => sleepNow({ here: true })); return; }
-    // cansado → vai pra caminha (mais provável à noite e com a luz apagada)
+    // cansado → vai pra caminha (mais provável à noite)
     if (n.energy < th.tired && U.chance(0.05 + G.time.sleepiness() * 0.15)) { run(() => sleepNow()); return; }
     if (G.time.isNight() && n.energy < 55 && U.chance(0.01 + G.time.sleepiness() * 0.02)) { run(() => sleepNow()); return; }
 
@@ -340,9 +387,13 @@
     if (playful) { w.playAlone *= 2.5; w.chaseTail *= 2; w.wander *= 1.3; }
     if (n.energy < 40) { w.nap = (w.nap || 0) * 4; w.sit *= 2; w.wander *= 0.5; w.playAlone *= 0.2; w.chaseTail = 0; }
     if (G.time.phase === 'morning') w.stretch *= 2;
-    if (G.time.isNight()) { w.windowWatch *= 1.6; w.nap *= 2; }
-    if (G.objects.radioOn) w.dance = 40;
+    if (G.time.isNight()) w.nap *= 2;
+    if (!G.play.toys.plush) w.visitPlush = 0;
+    // cooldowns: a mesma mania não se repete logo em seguida
+    const cds = cfg().cooldowns || {};
+    for (const k in w) if (lastRun[k] && now - lastRun[k] < (cds[k] || 0)) w[k] = 0;
     const pick = U.weighted(w);
+    lastRun[pick] = now;
     const fn = ACTIONS[pick];
     scheduleIdle(n.energy < 35 ? 1.5 : 1);
     if (fn) run(fn);
@@ -352,32 +403,26 @@
     init() {
       setInterval(think, cfg().thinkEvery);
       G.bus.on('user:activity', () => { pauseUntil = Date.now() + cfg().afterInteractionPause; });
-      G.bus.on('pet:lift', () => { dancing = false; });
-      G.bus.on('music:beat', ({ beat }) => {
-        if (!dancing) return;
-        if (ps().physical || ps().activity || !phys().isIdle()) return;
-        phys().beat(beat);
-        if (beat === 0 && U.chance(0.6)) {
-          const p = phys().anchorPoint('top');
-          G.fx.spawn('note', p.x + U.rand(-30, 30), p.y + 10);
-        }
-      });
-      G.bus.on('objects:radio', (on) => {
-        if (!on) { dancing = false; return; }
-        setTimeout(() => {
-          if (!free()) return;
-          G.bubble.show('note', { duration: 900 });
-          run(goDance);
-        }, 700);
+      G.bus.on('pet:lift', () => {
+        if (staring) { staring = false; if (ps().emotion === 'staring') ps().clearEmotion(); }
       });
       G.bus.on('state:activity', ({ activity }) => { if (activity !== 'sleeping') sleepInfo = null; });
     },
 
     sleepNow: (o) => run(() => sleepNow(o)),
     wakeUp,
-    lookAtWindow: () => run(lookAtWindow),
-    startDancing,
-    get dancing() { return dancing; },
+    /** tocou nele enquanto encarava: susto, "você piscou primeiro" */
+    breakStare() {
+      if (!staring) return;
+      staring = false;
+      ps().emote('startled', 1300);
+      phys().hop(30);
+      G.bubble.show('!', { duration: 900 });
+      G.audio.play('meow', { short: true, pitch: 1.4 });
+      G.bus.emit('behavior:stareBroken');
+      setTimeout(() => { if (phys().isIdle()) phys().setPose('stand'); }, 900);
+    },
+    get staring() { return staring; },
     get busy() { return busy; },
     actions: ACTIONS
   };

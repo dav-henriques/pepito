@@ -18,6 +18,7 @@ $mime = @{
   '.png' = 'image/png'; '.jpg' = 'image/jpeg'; '.jpeg' = 'image/jpeg'; '.gif' = 'image/gif'
   '.webp' = 'image/webp'; '.svg' = 'image/svg+xml'; '.ico' = 'image/x-icon'
   '.woff2' = 'font/woff2'; '.mp3' = 'audio/mpeg'; '.ogg' = 'audio/ogg'; '.md' = 'text/plain; charset=utf-8'
+  '.wav' = 'audio/wav'; '.m4a' = 'audio/mp4'; '.webm' = 'audio/webm'; '.txt' = 'text/plain; charset=utf-8'
   '.webmanifest' = 'application/manifest+json'
 }
 
@@ -43,7 +44,8 @@ while ($listener.IsListening) {
     }
     $res.Headers.Add('Cache-Control', 'no-store')
     $res.ContentLength64 = $bytes.Length
-    $res.OutputStream.Write($bytes, 0, $bytes.Length)
+    # HEAD: o jogo pergunta se um arquivo existe (ex.: seu .mp3) sem baixar
+    if ($ctx.Request.HttpMethod -ne 'HEAD') { $res.OutputStream.Write($bytes, 0, $bytes.Length) }
   } catch {
     Write-Host "Erro: $_"
   } finally {

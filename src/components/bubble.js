@@ -67,11 +67,48 @@
       return el;
     },
 
+    /** Balão de FALA com texto (frases de personal.js → speech) */
+    say(text, opts = {}) {
+      if (!host || !text) return null;
+      this.hide(true);
+      const el = U.h('div', { class: 'bubble say' + (opts.shout ? ' shout' : '') }, [U.h('span', { text: String(text) })]);
+      if (/^\[.*\]$/.test(String(text).trim())) el.classList.add('placeholder');
+      host.appendChild(el);
+      current = el;
+      // não deixa o balão sair da tela: reposiciona enquanto o pet se mexe
+      const half = el.offsetWidth / 2;
+      const keepInside = () => {
+        if (current !== el) { gsap.ticker.remove(keepInside); return; }
+        const roomR = G.room.el.getBoundingClientRect();
+        const hostR = host.getBoundingClientRect();
+        const s = G.room.depthScale(G.physics.P.z) || 1;
+        const cx = hostR.left;                       // centro do balão (sem o deslocamento)
+        let shift = 0;
+        if (cx - half * s < roomR.left + 8) shift = roomR.left + 8 - (cx - half * s);
+        else if (cx + half * s > roomR.right - 8) shift = roomR.right - 8 - (cx + half * s);
+        gsap.set(el, { x: shift / s });
+      };
+      el._keep = keepInside;
+      keepInside();
+      gsap.ticker.add(keepInside);
+      const tilt = U.rand(-4, 4);
+      gsap.fromTo(el,
+        { xPercent: -50, scale: 0, rotation: tilt * 2.5, y: 12, opacity: 0 },
+        { scale: 1, rotation: tilt, y: 0, opacity: 1, duration: 0.45, ease: 'back.out(2.4)' });
+      const words = String(text).length;
+      const dur = opts.duration ?? U.clamp(1700 + words * 60, 2400, 6000);
+      if (hideCall) hideCall.kill();
+      hideCall = gsap.delayedCall(dur / 1000, () => this.hide());
+      G.bus.emit('bubble:say', { text });
+      return el;
+    },
+
     hide(instant) {
       const el = current;
       if (!el) return;
       current = null;
       if (hideCall) { hideCall.kill(); hideCall = null; }
+      if (el._keep) gsap.ticker.remove(el._keep);
       gsap.killTweensOf(el);
       if (instant) { el.remove(); return; }
       gsap.to(el, { scale: 0.4, opacity: 0, y: -8, duration: 0.22, ease: 'power2.in', onComplete: () => el.remove() });

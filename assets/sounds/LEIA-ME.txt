@@ -1,0 +1,7 @@
+Coloque aqui os sons em arquivo (opcionais).
+
+  meow.mp3  -> substitui o miado sintetizado
+
+Sem arquivos, o jogo usa sons sintetizados e funciona normalmente.
+Para variações ou outros efeitos, veja src/config/assets.js -> sfx
+e assets/LEIA-ME.md (seção "sounds").
